@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+harness/memory/bmad-state.json.bak
+harness/memory/.bmad_*

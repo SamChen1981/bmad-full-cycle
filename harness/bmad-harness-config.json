@@ -1,0 +1,105 @@
+{
+  "project": "my-project",
+  "version": "1.0.0",
+  "description": "BMAD Harness 阶段管控配置（通用模板 — 请按项目修改）",
+  "subprojects": {
+    "_EXAMPLE_backend": {
+      "type": "backend",
+      "path": "backend",
+      "tech": "Spring Boot / Node.js / ..."
+    },
+    "_EXAMPLE_frontend": {
+      "type": "frontend",
+      "path": "frontend",
+      "tech": "React / Vue / ..."
+    }
+  },
+  "phases": {
+    "requirements": {
+      "agent": "analyst",
+      "description": "需求分析阶段，输出 PRD、产品简报和验收标准",
+      "outputs": [
+        "docs/PRD.md"
+      ],
+      "next": "design",
+      "gatekeeper_checks": [
+        "PRD 文档存在"
+      ]
+    },
+    "design": {
+      "agent": "architect",
+      "description": "架构设计阶段，输出技术架构、数据库设计和方案",
+      "outputs": [
+        "docs/architecture_design.md"
+      ],
+      "next": "implementation",
+      "gatekeeper_checks": [
+        "架构设计文档存在",
+        "至少一个子项目已初始化"
+      ]
+    },
+    "implementation": {
+      "agent": "coder",
+      "description": "编码实现阶段，各子项目按架构文档开发",
+      "outputs": [],
+      "next": "testing",
+      "gatekeeper_checks": [
+        "源码目录非空",
+        "后端项目可编译"
+      ]
+    },
+    "testing": {
+      "agent": "qa",
+      "description": "测试阶段，编写和运行测试",
+      "outputs": [],
+      "next": "review",
+      "gatekeeper_checks": [
+        "至少一个子项目存在测试目录",
+        "测试可运行通过"
+      ]
+    },
+    "review": {
+      "agent": "reviewer",
+      "description": "代码审查阶段，生成审查报告",
+      "outputs": [
+        "_bmad-output/review-report.md"
+      ],
+      "next": null,
+      "gatekeeper_checks": [
+        "审查报告已生成"
+      ]
+    }
+  },
+  "agents": {
+    "analyst": {
+      "role": "需求分析师",
+      "system_prompt": "你是项目的需求分析师。请基于 docs/ 下已有文档进行分析。",
+      "tools": ["read_file", "write_file", "search"],
+      "trae_skills": ["bmad-agent-analyst", "bmad-create-prd", "bmad-validate-prd"]
+    },
+    "architect": {
+      "role": "架构师",
+      "system_prompt": "你是项目的架构师。请参考 docs/ 下已有的架构文档进行设计。",
+      "tools": ["read_file", "write_file", "search", "diagram"],
+      "trae_skills": ["bmad-agent-architect", "bmad-create-architecture"]
+    },
+    "coder": {
+      "role": "开发工程师",
+      "system_prompt": "你是项目的开发工程师。请按照 docs/ 中的技术方案进行开发。",
+      "tools": ["read_file", "write_file", "terminal", "search"],
+      "trae_skills": ["bmad-agent-dev", "bmad-dev-story", "bmad-quick-dev"]
+    },
+    "qa": {
+      "role": "测试工程师",
+      "system_prompt": "你是项目的测试工程师。请编写和执行测试。",
+      "tools": ["read_file", "write_file", "terminal", "search"],
+      "trae_skills": ["bmad-agent-qa", "bmad-qa-generate-e2e-tests"]
+    },
+    "reviewer": {
+      "role": "代码审查员",
+      "system_prompt": "你是项目的代码审查员。请审查代码质量、安全性和最佳实践。",
+      "tools": ["read_file", "write_file", "search"],
+      "trae_skills": ["bmad-code-review", "bmad-review-adversarial-general", "bmad-review-edge-case-hunter"]
+    }
+  }
+}
