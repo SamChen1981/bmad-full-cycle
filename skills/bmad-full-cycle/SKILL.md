@@ -24,6 +24,16 @@
 - "我是否在问用户要不要继续？" → 删掉，直接执行。
 - "我是否在列出下一步建议？" → 删掉，直接执行。
 
+### Override 与子 Skill 的优先级规则
+
+本 Skill 的 Override Rules 与被调用的子 Skill（如 `bmad-autopilot`、`bmad-create-story` 等）之间遵循以下优先级：
+
+1. **HALT 条件优先于 Override。** 当子 Skill 触发 HALT（技术问题无法自动解决），必须停下来汇报。HALT 不是"礼貌停下确认"，而是"系统层面的强制中断"。Override 禁止的是社交性停顿（问用户要不要继续、列出建议清单），不禁止技术性中断。
+2. **Override 覆盖子 Skill 的"确认"倾向。** 子 Skill 内部如果有"完成后等待用户确认"或"输出下一步建议"的指令，一律被本 Override 覆盖——不问、不停、不建议。
+3. **Pause 听用户。** 用户随时可以说"暂停"来中断执行。Pause 是用户主动行为，不受 Override 约束。
+
+简言之：`HALT(技术中断) > Pause(用户中断) > Override(禁止社交停顿) > 子 Skill 默认行为`
+
 ## 触发方式
 
 **启动：**

@@ -15,7 +15,7 @@
 
 ### 必须执行的行为
 
-5. ✅ **每个 Story 只输出一行进度。** 格式：`✅ [1-1] 标题 (1/19)`
+5. ✅ **每个 Story 只输出一行进度。** 格式：`✅ [1-1] 标题 (N/Y)`（Y 从 sprint-status.yaml 动态读取）
 6. ✅ **code-review 完成 → 输出一行进度 → 立即开始下一个 Story。** 这是一个不可中断的循环。
 7. ✅ **唯一合法的停止条件：** HALT（技术问题）或用户说"暂停"。没有第三种。
 
@@ -25,6 +25,14 @@
 - "我是否在问用户要不要继续？" → 如果是，删掉这段文字，直接执行下一个 Story。
 - "我是否在列出下一步建议？" → 如果是，删掉这段文字，直接执行下一个 Story。
 - "我是否因为觉得做得够多了而想停下来？" → 如果是，不要停，继续执行。
+
+### Override 与 HALT/Pause 的优先级
+
+**优先级从高到低：** `HALT(技术中断) > Pause(用户中断) > Override(禁止社交停顿) > 默认行为`
+
+- **HALT 优先于 Override。** 编译3次失败、审查2次修复失败等技术问题必须停下来。Override 禁止的是"礼貌地问用户要不要继续"，不禁止技术性强制中断。
+- **用户说"暂停"优先于 Override。** Pause 是用户主动行为，必须响应。
+- **Override 覆盖子 Skill 的确认倾向。** 子 Skill 里任何"等待确认"或"输出建议清单"的指令一律被覆盖。
 
 ## 触发方式
 
@@ -49,7 +57,7 @@
 | Story 实现成功 + 审查有严重问题 | **自动修复**，修复后重新审查，通过则继续 |
 | 修复尝试 2 次仍失败 | **HALT** — 停下来汇报问题，等待用户指示 |
 | 编译失败 / 测试不过 | **自动修复**，修复后重试，连续 3 次失败则 HALT |
-| sprint-status.yaml 中无 backlog Story | **全部完成** — 输出最终报告 |
+| sprint-status.yaml 中无 backlog/ready-for-dev Story | **全部完成** — 输出最终报告 |
 
 **核心原则：能自动解决的问题绝不打扰用户。**
 
@@ -70,7 +78,7 @@ LOOP (直到所有 Story 完成或 HALT):
   │     输出: (无)
   │
   ├─ 4. 更新 sprint-status.yaml → Story 状态改为 done
-  │     输出: ✅ [Story-ID] 标题 (N/19)
+  │     输出: ✅ [Story-ID] 标题 (N/Y)（Y = sprint-status.yaml 中的 Story 总数）
   │
   └─ 5. 【⚠️ 提醒：不要停！不要总结！不要问用户！立即开始下一个 Story。】
          GOTO LOOP
@@ -83,13 +91,15 @@ LOOP (直到所有 Story 完成或 HALT):
 **不要每个 Story 都长篇报告。** 只输出一行进度：
 
 ```
-✅ [1-1] 根 POM 版本升级 (1/19)
-✅ [1-2] javax→jakarta 迁移 (2/19)
-✅ [1-3] Spring Security 6.x 适配 (3/19)
+✅ [1-1] 根 POM 版本升级 (1/Y)
+✅ [1-2] javax→jakarta 迁移 (2/Y)
+✅ [1-3] Spring Security 6.x 适配 (3/Y)
 ⚠️ [1-4] Gateway 适配 — 自动修复中 (retry 1/3)
-✅ [1-4] Gateway 适配 (4/19)
+✅ [1-4] Gateway 适配 (4/Y)
 ...
 ```
+
+其中 Y 为 `sprint-status.yaml` 中所有 Story 的总数（动态读取，不硬编码）。
 
 **Epic 完成时多输出一行：**
 
@@ -101,18 +111,21 @@ LOOP (直到所有 Story 完成或 HALT):
 
 ```
 🎉 迁移完成
-   7 Epics / 19 Stories
+   X Epics / Y Stories（从 sprint-status.yaml 动态读取）
    耗时: XX 分钟
    自动修复: X 次
    需要关注: [列出非严重审查建议的摘要]
 ```
 
-## 上下文文件
+## 上下文文件（动态发现）
 
-- Sprint 进度: `_bmad-output/implementation-artifacts/sprint-status.yaml`
-- Epic 文件: `_bmad-output/planning-artifacts/epic-*.md`
-- Story 文件: `_bmad-output/implementation-artifacts/*.md`
-- 迁移总方案: `bmad-sales-ai/docs/migration-plan.md`
+Autopilot 不硬编码路径，而是从 `_bmad/bmm/config.yaml` 读取：
+
+- **Sprint 进度**: `{implementation_artifacts}/sprint-status.yaml`
+- **Epic 文件**: `{planning_artifacts}/epic-*.md`
+- **Story 文件**: `{implementation_artifacts}/*.md`
+- **迁移方案**: `docs/migration-plan.md`（如果存在）
+- **项目上下文**: `**/project-context.md`（如果存在）
 
 ## HALT 条件（自动停止，需要用户介入解决问题）
 
@@ -122,6 +135,24 @@ LOOP (直到所有 Story 完成或 HALT):
 4. 需要 Nacos 配置或外部环境变更（如数据库建表）
 
 > **HALT ≠ 暂停**：HALT 是遇到无法自动解决的问题被迫停下；暂停是用户主动喊停。HALT 输出问题诊断，暂停输出进度报告。
+
+### 重试计数器持久化
+
+**重试次数必须通过 Harness 持久化，禁止仅在 AI 记忆中维护。** 这确保了上下文截断或会话重建后计数器不会归零。
+
+操作方式（如果项目目录下存在 `bmad_harness.py`）：
+
+```
+# 每次重试时递增计数，Harness 返回当前值并自动判断是否达上限
+python bmad_harness.py retry <story-id> <type>
+# type = compile | review | test
+# 达上限时返回 exit code 1 → 触发 HALT
+
+# Story 通过审查后，重置该 Story 的计数器
+python bmad_harness.py retry-reset <story-id>
+```
+
+如果 `bmad_harness.py` 不存在，则退回到在 `sprint-status.yaml` 中记录重试信息：在对应 Story 下添加 `retry_compile: N` / `retry_review: N` 字段。
 
 HALT 时输出：
 
@@ -134,8 +165,9 @@ HALT 时输出：
 
 ## 注意事项
 
-- Epic 1→7 严格按序，不跳过。
+- Epic 严格按 `sprint-status.yaml` 中的定义顺序执行，不跳过。
 - 每个 Epic 内的 Story 也严格按序。
+- Story 总数和 Epic 总数从 `sprint-status.yaml` 动态读取，不硬编码。
 - 不要输出解释性文字，只要进度和结果。
 - 用户要的是最终结果，不是过程。
 
@@ -160,7 +192,7 @@ HALT 时输出：
 
 ## 文档生成规范
 
-当所有 19 个 Story 完成后，自动执行文档收尾：
+当所有 Story 完成后（sprint-status.yaml 中无 backlog/ready-for-dev/in-progress/review Story），自动执行文档收尾：
 
 ### 输出目录结构
 
@@ -209,8 +241,8 @@ docs/
 ⏸️ 迁移已暂停
 
 📊 总体进度
-   Stories: X/19 完成 | 当前: [Story-ID] [标题]
-   Epics:   X/7 完成 | 当前 Epic: [Epic 名称]
+   Stories: X/Y 完成 | 当前: [Story-ID] [标题]
+   Epics:   X/Z 完成 | 当前 Epic: [Epic 名称]
 
 📋 已完成 Stories
    ✅ [1-1] 根 POM 版本升级

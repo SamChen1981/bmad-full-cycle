@@ -26,6 +26,14 @@
 - "我是否在列出下一步建议？" → 如果是，删掉这段文字，直接执行下一个 Story。
 - "我是否因为觉得做得够多了而想停下来？" → 如果是，不要停，继续执行。
 
+### Override 与 HALT/Pause 的优先级
+
+**优先级从高到低：** `HALT(技术中断) > Pause(用户中断) > Override(禁止社交停顿) > 默认行为`
+
+- **HALT 优先于 Override。** 编译3次失败、审查2次修复失败等技术问题必须停下来。Override 禁止的是"礼貌地问用户要不要继续"，不禁止技术性强制中断。
+- **用户说"暂停"优先于 Override。** Pause 是用户主动行为，必须响应。
+- **Override 覆盖子 Skill 的确认倾向。** 子 Skill 里任何"等待确认"或"输出建议清单"的指令一律被覆盖。
+
 ## 触发方式
 
 **启动执行：**
@@ -144,6 +152,24 @@ Autopilot 不硬编码路径，而是从 `_bmad/bmm/config.yaml` 读取：
 5. `sprint-status.yaml` 格式异常或解析失败
 
 > **HALT ≠ 暂停**：HALT 是遇到无法自动解决的问题被迫停下；暂停是用户主动喊停。HALT 输出问题诊断，暂停输出进度报告。
+
+### 重试计数器持久化
+
+**重试次数必须通过 Harness 持久化，禁止仅在 AI 记忆中维护。** 这确保了上下文截断或会话重建后计数器不会归零。
+
+操作方式（如果项目目录下存在 `bmad_harness.py`）：
+
+```
+# 每次重试时递增计数，Harness 返回当前值并自动判断是否达上限
+python bmad_harness.py retry <story-id> <type>
+# type = compile | review | test
+# 达上限时返回 exit code 1 → 触发 HALT
+
+# Story 通过审查后，重置该 Story 的计数器
+python bmad_harness.py retry-reset <story-id>
+```
+
+如果 `bmad_harness.py` 不存在，则退回到在 `sprint-status.yaml` 中记录重试信息：在对应 Story 下添加 `retry_compile: N` / `retry_review: N` 字段。
 
 HALT 时输出：
 

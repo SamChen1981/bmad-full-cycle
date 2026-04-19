@@ -239,6 +239,60 @@ def collect_supporting_files(skill_dir):
     return files
 
 
+def rewrite_body_paths(body, skill_name, support_files, target_base="_bmad/skills"):
+    """Rewrite relative path references in skill body to target IDE path structure.
+
+    Handles common patterns:
+      - ./filename.ext          → _bmad/skills/{name}/filename.ext
+      - ./subdir/filename.ext   → _bmad/skills/{name}/subdir/filename.ext
+      - (filename.ext)          → (_bmad/skills/{name}/filename.ext)  (markdown links)
+      - "filename.ext"          → "_bmad/skills/{name}/filename.ext"  (quoted refs)
+    Only rewrites references to files that actually exist in the skill directory.
+    """
+    if not support_files:
+        return body
+
+    target_prefix = f"{target_base}/{skill_name}"
+    support_set = set(support_files)
+
+    # Pattern 1: Explicit relative paths  ./path/to/file
+    body = re.sub(
+        r'\./([^\s\)\"\'>\]]+)',
+        lambda m: f"{target_prefix}/{m.group(1)}" if m.group(1) in support_set else m.group(0),
+        body
+    )
+
+    # Pattern 2: Markdown link targets  [text](filename.ext) or [text](subdir/file)
+    def rewrite_md_link(m):
+        path = m.group(1)
+        if path in support_set:
+            return f"]({target_prefix}/{path})"
+        return m.group(0)
+    body = re.sub(r'\]\(([^):/\s][^):]*?\.(md|yaml|yml|json|txt|sh|py|j2|tmpl))\)', rewrite_md_link, body)
+
+    return body
+
+
+def build_supporting_files_section(skill_name, support_files, target_base="_bmad/skills"):
+    """Build an explicit markdown section for supporting file references.
+
+    Uses a clear instruction block instead of HTML comments, so AI agents
+    will actually read and use the file paths.
+    """
+    if not support_files:
+        return ""
+
+    target_prefix = f"{target_base}/{skill_name}"
+    lines = [
+        f"**Supporting files** for this skill are located in `{target_prefix}/`:",
+        "",
+    ]
+    for f in sorted(support_files):
+        lines.append(f"- `{target_prefix}/{f}`")
+    lines.append("")
+    return "\n".join(lines)
+
+
 # ── IDE-specific Installers ───────────────────────────────────────────────
 
 def install_trae(skills_dir, target_project, skill_names):
@@ -286,13 +340,14 @@ def install_cursor(skills_dir, target_project, skill_names):
         mdc_lines.append("---")
         mdc_lines.append("")
 
-        # Add reference to supporting files if they exist
+        # Add explicit supporting file references (replaces HTML comment)
         support_files = collect_supporting_files(src_dir)
         if support_files:
-            mdc_lines.append(f"<!-- Supporting files: _bmad/skills/{name}/ -->")
-            mdc_lines.append("")
+            mdc_lines.append(build_supporting_files_section(name, support_files))
 
-        mdc_lines.append(body)
+        # Rewrite relative paths in body to point to _bmad/skills/{name}/
+        rewritten_body = rewrite_body_paths(body, name, support_files)
+        mdc_lines.append(rewritten_body)
 
         # Write .mdc file
         mdc_path = os.path.join(rules_dir, f"{name}.mdc")
@@ -347,10 +402,11 @@ def install_windsurf(skills_dir, target_project, skill_names):
 
         support_files = collect_supporting_files(src_dir)
         if support_files:
-            rule_lines.append(f"<!-- Supporting files: _bmad/skills/{name}/ -->")
-            rule_lines.append("")
+            rule_lines.append(build_supporting_files_section(name, support_files))
 
-        rule_lines.append(body)
+        # Rewrite relative paths in body
+        rewritten_body = rewrite_body_paths(body, name, support_files)
+        rule_lines.append(rewritten_body)
 
         # Write rule file
         rule_path = os.path.join(rules_dir, f"{name}.md")
@@ -402,12 +458,12 @@ def install_claude_code(skills_dir, target_project, skill_names):
         skill_entries.append((name, desc, trigger))
 
         # Create slash command file
-        cmd_content = body
-
-        # Add supporting file references
+        # Add supporting file references and rewrite paths
         support_files = collect_supporting_files(src_dir)
+        cmd_content = ""
         if support_files:
-            cmd_content = f"<!-- Supporting files: _bmad/skills/{name}/ -->\n\n" + cmd_content
+            cmd_content = build_supporting_files_section(name, support_files) + "\n"
+        cmd_content += rewrite_body_paths(body, name, support_files)
 
         cmd_path = os.path.join(commands_dir, f"{name}.md")
         is_update = os.path.exists(cmd_path)
@@ -733,6 +789,241 @@ def print_next_steps(target_project, ide):
         print(f"  {DIM}CLAUDE.md provides project context automatically{RESET}\n")
 
 
+# ── Uninstall ─────────────────────────────────────────────────────────────
+
+def get_installed_skills(target_project, ide):
+    """Discover which BMAD skills are currently installed in the target project."""
+    installed = []
+    ide_config = IDE_CONFIGS[ide]
+
+    if ide == "trae":
+        skills_dir = os.path.join(target_project, ".trae", "skills")
+        if os.path.isdir(skills_dir):
+            for name in sorted(os.listdir(skills_dir)):
+                if name.startswith("bmad-") and os.path.isdir(os.path.join(skills_dir, name)):
+                    installed.append(name)
+    elif ide == "cursor":
+        rules_dir = os.path.join(target_project, ".cursor", "rules")
+        if os.path.isdir(rules_dir):
+            for fname in sorted(os.listdir(rules_dir)):
+                if fname.startswith("bmad-") and fname.endswith(".mdc"):
+                    installed.append(fname[:-4])  # strip .mdc
+    elif ide == "windsurf":
+        rules_dir = os.path.join(target_project, ".windsurf", "rules")
+        if os.path.isdir(rules_dir):
+            for fname in sorted(os.listdir(rules_dir)):
+                if fname.startswith("bmad-") and fname.endswith(".md"):
+                    installed.append(fname[:-3])  # strip .md
+    elif ide == "claude-code":
+        commands_dir = os.path.join(target_project, ".claude", "commands")
+        if os.path.isdir(commands_dir):
+            for fname in sorted(os.listdir(commands_dir)):
+                if fname.startswith("bmad-") and fname.endswith(".md"):
+                    installed.append(fname[:-3])
+
+    return installed
+
+
+def uninstall_skills(target_project, ide, skill_names=None):
+    """Remove installed BMAD skills from the target project.
+
+    Args:
+        target_project: Project root path
+        ide: IDE identifier
+        skill_names: List of skill names to remove, or None for all BMAD skills
+    """
+    installed = get_installed_skills(target_project, ide)
+    if skill_names:
+        to_remove = [s for s in skill_names if s in installed]
+    else:
+        to_remove = installed
+
+    if not to_remove:
+        print_warn("No BMAD skills found to uninstall")
+        return 0
+
+    print_header(f"Uninstalling BMAD Skills from {IDE_CONFIGS[ide]['name']}")
+    print_info(f"Target: {target_project}")
+    print_info(f"Skills to remove: {len(to_remove)}")
+    print()
+
+    removed = 0
+
+    for name in to_remove:
+        if ide == "trae":
+            skill_dir = os.path.join(target_project, ".trae", "skills", name)
+            if os.path.isdir(skill_dir):
+                shutil.rmtree(skill_dir)
+                print_success(f"Removed {name}/")
+                removed += 1
+        elif ide == "cursor":
+            mdc_path = os.path.join(target_project, ".cursor", "rules", f"{name}.mdc")
+            if os.path.isfile(mdc_path):
+                os.remove(mdc_path)
+                print_success(f"Removed {name}.mdc")
+                removed += 1
+        elif ide == "windsurf":
+            rule_path = os.path.join(target_project, ".windsurf", "rules", f"{name}.md")
+            if os.path.isfile(rule_path):
+                os.remove(rule_path)
+                print_success(f"Removed {name}.md")
+                removed += 1
+        elif ide == "claude-code":
+            cmd_path = os.path.join(target_project, ".claude", "commands", f"{name}.md")
+            if os.path.isfile(cmd_path):
+                os.remove(cmd_path)
+                print_success(f"Removed /{name}")
+                removed += 1
+
+        # Remove supporting files for non-trae IDEs
+        if ide != "trae":
+            support_dir = os.path.join(target_project, "_bmad", "skills", name)
+            if os.path.isdir(support_dir):
+                shutil.rmtree(support_dir)
+                print_info(f"  Removed _bmad/skills/{name}/")
+
+    # Claude Code: clean BMAD section from CLAUDE.md
+    if ide == "claude-code" and not skill_names:
+        claude_md_path = os.path.join(target_project, "CLAUDE.md")
+        if os.path.isfile(claude_md_path):
+            with open(claude_md_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            marker_start = "<!-- BMAD-START -->"
+            marker_end = "<!-- BMAD-END -->"
+            if marker_start in content:
+                pattern = re.compile(
+                    r'\n?' + re.escape(marker_start) + r'.*?' + re.escape(marker_end) + r'\n?',
+                    re.DOTALL
+                )
+                new_content = pattern.sub('', content).strip()
+                if new_content:
+                    with open(claude_md_path, "w", encoding="utf-8") as f:
+                        f.write(new_content + "\n")
+                    print_success("Cleaned BMAD section from CLAUDE.md")
+                else:
+                    os.remove(claude_md_path)
+                    print_success("Removed CLAUDE.md (was BMAD-only)")
+
+    # Clean up empty _bmad/skills/ directory
+    bmad_skills_dir = os.path.join(target_project, "_bmad", "skills")
+    if os.path.isdir(bmad_skills_dir) and not os.listdir(bmad_skills_dir):
+        os.rmdir(bmad_skills_dir)
+        bmad_dir = os.path.join(target_project, "_bmad")
+        if os.path.isdir(bmad_dir) and not os.listdir(bmad_dir):
+            os.rmdir(bmad_dir)
+
+    print()
+    print(f"  {BOLD}Done!{RESET} Removed {removed} skill(s)")
+    return removed
+
+
+# ── Upgrade ───────────────────────────────────────────────────────────────
+
+def upgrade_skills(skills_dir, target_project, ide, skill_names=None):
+    """Upgrade installed BMAD skills: show changes, then reinstall.
+
+    Only upgrades skills that are already installed. New skills are skipped
+    unless explicitly listed in skill_names.
+    """
+    installed = get_installed_skills(target_project, ide)
+    available = discover_available_skills(skills_dir)
+
+    if skill_names:
+        to_upgrade = [s for s in skill_names if s in available]
+    else:
+        to_upgrade = [s for s in installed if s in available]
+
+    if not to_upgrade:
+        print_warn("No BMAD skills to upgrade")
+        return 0
+
+    print_header(f"Upgrading BMAD Skills — {IDE_CONFIGS[ide]['name']}")
+    print_info(f"Target: {target_project}")
+    print_info(f"Skills to check: {len(to_upgrade)}")
+    print()
+
+    changed = []
+    unchanged = []
+
+    for name in to_upgrade:
+        # Compare source and installed content
+        src_skill_md = os.path.join(skills_dir, name, "SKILL.md")
+        if not os.path.isfile(src_skill_md):
+            continue
+
+        with open(src_skill_md, "r", encoding="utf-8") as f:
+            src_content = f.read()
+
+        # Get installed content
+        installed_content = _get_installed_content(target_project, ide, name)
+
+        if installed_content is None:
+            changed.append((name, "new"))
+        elif _content_differs(src_content, installed_content):
+            changed.append((name, "modified"))
+        else:
+            unchanged.append(name)
+
+    if unchanged:
+        print(f"  {DIM}Unchanged: {len(unchanged)} skill(s){RESET}")
+
+    if not changed:
+        print()
+        print(f"  {BOLD}All skills are up to date!{RESET}")
+        return 0
+
+    print()
+    for name, change_type in changed:
+        icon = "+" if change_type == "new" else "~"
+        label = "new" if change_type == "new" else "updated"
+        print(f"  {YELLOW}{icon}{RESET} {name} {DIM}({label}){RESET}")
+    print()
+
+    # Perform the upgrade (reinstall changed skills only)
+    names_to_install = [name for name, _ in changed]
+    count = install_skills(skills_dir, target_project, ide, names_to_install)
+
+    return count
+
+
+def _get_installed_content(target_project, ide, name):
+    """Read the installed skill content for comparison."""
+    if ide == "trae":
+        path = os.path.join(target_project, ".trae", "skills", name, "SKILL.md")
+    elif ide == "cursor":
+        path = os.path.join(target_project, ".cursor", "rules", f"{name}.mdc")
+    elif ide == "windsurf":
+        path = os.path.join(target_project, ".windsurf", "rules", f"{name}.md")
+    elif ide == "claude-code":
+        path = os.path.join(target_project, ".claude", "commands", f"{name}.md")
+    else:
+        return None
+
+    if not os.path.isfile(path):
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+def _content_differs(source, installed):
+    """Compare source SKILL.md with installed content (ignoring frontmatter/headers added during conversion)."""
+    # Normalize: strip leading/trailing whitespace and compare core content
+    # For non-trae IDEs, installed content has added frontmatter/headers,
+    # so we just check if the source body is a substring of installed
+    src_lines = [l.strip() for l in source.strip().split('\n') if l.strip()]
+    inst_lines = [l.strip() for l in installed.strip().split('\n') if l.strip()]
+
+    # Quick check: if line counts differ significantly, content changed
+    # Use a simple heuristic: check first 5 and last 5 non-empty lines of source body
+    if not src_lines or not inst_lines:
+        return True
+
+    # Check key content lines from source appear in installed
+    sample_lines = src_lines[:5] + src_lines[-5:]
+    matches = sum(1 for line in sample_lines if line in inst_lines)
+    return matches < len(sample_lines) * 0.6
+
+
 # ── Entry Point ───────────────────────────────────────────────────────────
 
 def main():
@@ -748,6 +1039,8 @@ def main():
               python install.py /path/to/project --select           # interactive group selection
               python install.py /path/to/project --list             # list available skills
               python install.py /path/to/project --no-init          # skip _bmad/ config creation
+              python install.py /path/to/project --upgrade          # upgrade existing skills
+              python install.py /path/to/project --uninstall        # remove all BMAD skills
 
             Supported IDEs:
               trae         Trae IDE — .trae/skills/ directories
@@ -765,6 +1058,10 @@ def main():
                         help="Interactively select skill groups to install")
     parser.add_argument("--no-init", action="store_true",
                         help="Skip _bmad/ config directory creation")
+    parser.add_argument("--uninstall", action="store_true",
+                        help="Remove all installed BMAD skills from the project")
+    parser.add_argument("--upgrade", action="store_true",
+                        help="Upgrade installed skills (only update changed files)")
 
     args = parser.parse_args()
     skills_dir = get_repo_skills_dir()
@@ -789,6 +1086,16 @@ def main():
         else:
             ide = "trae"
             print_info(f"No IDE detected, using default: {IDE_CONFIGS[ide]['name']}")
+
+    # Uninstall mode
+    if args.uninstall:
+        uninstall_skills(target, ide)
+        return
+
+    # Upgrade mode
+    if args.upgrade:
+        upgrade_skills(skills_dir, target, ide)
+        return
 
     # Skill selection
     selected = select_skills_interactive(skills_dir) if args.select else None
