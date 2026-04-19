@@ -1,214 +1,173 @@
 # BMAD Full Cycle
 
-从需求到代码到文档的一键 AI 全自动开发。
+AI-driven end-to-end development: describe a feature, get working code + full documentation.
 
-在 AI IDE（Trae / Cursor / Windsurf）中输入一句功能描述，自动走完"需求分析 → 架构设计 → API 契约 → Epic/Story 拆分 → 就绪检查 → Sprint 规划 → 自动编码 → 文档生成"完整流程。你负责说要什么，AI 负责做完。
+Supports **Trae**, **Cursor**, **Windsurf**, and **Claude Code**. One install script adapts to your IDE's native format.
 
-## 安装
-
-### 前置要求
-
-- Python 3.6+
-- AI IDE（目前以 [Trae](https://trae.ai) 为例，也支持 Cursor、Windsurf）
-
-### 一键安装
-
-**在终端中执行：**
+## Install
 
 ```bash
-# 1. 克隆仓库
-git clone https://gitee.com/chnj1981/bmad-full-cycle.git
-
-# 2. 安装全部 skills 到你的项目（以 Trae 为例）
+git clone https://github.com/SamChen1981/bmad-full-cycle.git
 python bmad-full-cycle/install.py /path/to/your-project
 ```
 
-安装完成后你会看到：
-
-```
-────────────────────────────────────────────────────────
-  安装 BMAD Skills → Trae
-────────────────────────────────────────────────────────
-
-  → 目标项目: /path/to/your-project
-  → Skills 目录: /path/to/your-project/.trae/skills
-  → 待安装: 47 个 skills
-
-  ✓ bmad-init
-  ✓ bmad-create-prd
-  ✓ bmad-autopilot
-  ✓ bmad-full-cycle
-  ... (共 47 个)
-
-  完成！
-  → 新安装: 47
-```
-
-脚本会自动完成以下操作：
-
-1. 将 47 个 BMAD skills 复制到 `{你的项目}/.trae/skills/` 目录
-2. 创建 `_bmad/bmm/config.yaml` 基础配置文件
-3. 创建 `_bmad-output/` 输出目录结构
-
-### 安装选项
+The installer auto-detects your IDE (or defaults to Trae). To specify explicitly:
 
 ```bash
-# 安装到 Cursor 项目
-python install.py /path/to/project --ide cursor
-
-# 安装到 Windsurf 项目
-python install.py /path/to/project --ide windsurf
-
-# 交互式选择要安装的 skill 分组（不需要全部安装时）
-python install.py /path/to/project --select
-
-# 只安装 skills，不创建 _bmad 配置
-python install.py /path/to/project --no-init
-
-# 列出所有可用 skills（不安装）
-python install.py /path/to/project --list
+python install.py /path/to/project --ide trae        # Trae
+python install.py /path/to/project --ide cursor       # Cursor
+python install.py /path/to/project --ide windsurf     # Windsurf
+python install.py /path/to/project --ide claude-code  # Claude Code
 ```
 
-### 安装后的目录结构
+### What the installer does
+
+| IDE | Rule format | Location |
+|-----|-------------|----------|
+| **Trae** | Skill directories (`SKILL.md` + supporting files) | `.trae/skills/bmad-*/` |
+| **Cursor** | `.mdc` files (frontmatter: description/alwaysApply) | `.cursor/rules/bmad-*.mdc` |
+| **Windsurf** | `.md` workspace rules | `.windsurf/rules/bmad-*.md` |
+| **Claude Code** | Slash commands + `CLAUDE.md` | `.claude/commands/bmad-*.md` |
+
+For Cursor/Windsurf/Claude Code, supporting files (templates, steps, scripts) are placed in `_bmad/skills/` and referenced from the rule files.
+
+The installer also creates `_bmad/bmm/config.yaml` (project config) and `_bmad-output/` (output directories).
+
+### Install options
+
+```bash
+python install.py /path/to/project --select    # Interactive group selection
+python install.py /path/to/project --list       # List all 47 skills
+python install.py /path/to/project --no-init    # Skip _bmad/ config creation
+```
+
+## Usage
+
+Open your project in your IDE, then use the AI chat:
+
+### Trae / Cursor / Windsurf
+
+Type in the AI chat panel:
 
 ```
-your-project/
-├── .trae/skills/              ← 47 个 BMAD skills（Trae 自动加载）
-│   ├── bmad-full-cycle/       ← 全流程编排
-│   ├── bmad-autopilot/        ← 自动开发循环
-│   ├── bmad-create-prd/       ← PRD 生成
-│   ├── bmad-init/             ← 项目初始化
-│   └── ... (共 47 个)
-├── _bmad/bmm/config.yaml      ← BMAD 项目配置
-└── _bmad-output/               ← 产出物存放目录
-    ├── planning-artifacts/
-    └── implementation-artifacts/
+I want to build: user management with registration, login, roles, and org structure
 ```
 
-## 使用
-
-所有操作都在 **IDE 的 AI 对话面板**中以自然语言输入。
-
-### 从零开发一个新功能（全流程）
-
-打开 Trae → 右侧 AI 对话面板（`Cmd+L` / `Ctrl+L`）→ 输入：
+Or in Chinese:
 
 ```
 我要做一个功能: 用户管理模块，支持注册登录、角色权限、组织架构
 ```
 
-AI 会自动执行 8 个阶段，你会看到逐行进度输出：
+### Claude Code
+
+Use slash commands in the CLI:
 
 ```
-📝 Phase 1 完成: PRD 已生成
-🏗️ Phase 2 完成: 架构设计已生成
-📐 Phase 3 完成: API 契约已生成 → docs/api/openapi.yaml
-📋 Phase 4 完成: 3 Epics / 12 Stories 已拆分
-✅ Phase 5 完成: 实现就绪检查通过
-📊 Phase 6 完成: Sprint 规划就绪 (12 Stories in backlog)
-🚀 Phase 7 开始: 进入自动开发模式...
-   ✅ [1-1] 用户表设计与 Entity 创建 (1/12)
-   ✅ [1-2] 用户注册接口 (2/12)
-   ...
-📄 Phase 8 完成: 文档已生成
-🎉 全部完成
+/bmad-full-cycle user management with registration, login, roles, and org structure
 ```
 
-### 其他触发方式
+### Trigger phrases
 
-| 在 AI 对话中输入 | 触发的 Skill | 适用场景 |
-|-----------------|-------------|---------|
-| `我要做一个功能: [描述]` | bmad-full-cycle | 从零开始，全自动 |
-| `full cycle: [描述]` | bmad-full-cycle | 同上 |
-| `开始开发` | bmad-autopilot | 已有 PRD/架构/Epic，只需编码 |
-| `开始迁移` | bmad-migration-autopilot | 框架迁移场景 |
-| `bmad-help` | bmad-help | 查看所有可用命令 |
+| Input | Skill triggered | When to use |
+|-------|----------------|-------------|
+| `I want to build: [desc]` / `我要做一个功能: [desc]` | bmad-full-cycle | From scratch, fully automated |
+| `full cycle: [desc]` / `新功能: [desc]` | bmad-full-cycle | Same as above |
+| `start autopilot` / `开始开发` | bmad-autopilot | PRD/arch/epics already exist, just code |
+| `start migration` / `开始迁移` | bmad-migration-autopilot | Framework migration scenario |
+| `bmad-help` | bmad-help | List all available commands |
 
-### 运行中控制
+### Runtime controls
 
-| 在 AI 对话中输入 | 效果 |
-|-----------------|------|
-| `暂停` | 停止执行，输出详细进度报告（已完成 Story、修改的文件、待处理事项） |
-| `继续开发` | 从上次暂停处恢复执行 |
-| `当前进度` | 查看当前 Sprint 状态 |
-| `full cycle 交互模式: [描述]` | 每个阶段完成后暂停确认，适合想检查中间产物的场景 |
+| Input | Effect |
+|-------|--------|
+| `pause` / `暂停` | Stop execution, get detailed progress report |
+| `continue` / `继续开发` | Resume from where you paused |
+| `sprint status` / `当前进度` | Check current sprint progress |
+| `full cycle interactive: [desc]` | Pause after each phase for manual review |
 
-## 8 个阶段
+## 8 Phases
 
-| 阶段 | 做什么 | 产出文件 |
-|------|--------|---------|
-| Phase 1 | 需求分析 → 生成 PRD | `_bmad-output/planning-artifacts/prd.md` |
-| Phase 2 | 架构设计 | `_bmad-output/planning-artifacts/architecture.md` |
-| Phase 3 | API 契约（OpenAPI 3.0） | `docs/api/openapi.yaml` |
-| Phase 4 | Epic & Story 拆分 | `_bmad-output/planning-artifacts/epics.md` |
-| Phase 5 | 实现就绪检查 | 通过或自动修复 |
-| Phase 6 | Sprint 规划 | `_bmad-output/implementation-artifacts/sprint-status.yaml` |
-| Phase 7 | 自动编码（循环: 创建规格 → 实现 → 审查） | 源代码 + DDL + Swagger |
-| Phase 8 | 技术文档生成 & 收尾 | `docs/` 完整文档 |
+| Phase | What | Output |
+|-------|------|--------|
+| 1 | Requirements → PRD | `_bmad-output/planning-artifacts/prd.md` |
+| 2 | Architecture design | `_bmad-output/planning-artifacts/architecture.md` |
+| 3 | API contract (OpenAPI 3.0) | `docs/api/openapi.yaml` |
+| 4 | Epic & Story breakdown | `_bmad-output/planning-artifacts/epics.md` |
+| 5 | Implementation readiness check | Pass or auto-fix |
+| 6 | Sprint planning | `_bmad-output/implementation-artifacts/sprint-status.yaml` |
+| 7 | Auto-coding (loop: create → implement → review) | Source code + DDL + Swagger |
+| 8 | Documentation generation | `docs/` complete tech docs |
 
-## Skill 分组
+## 47 Skills in 9 Groups
 
-47 个 skills 按功能分为 9 组（`install.py --list` 查看完整清单）：
+Run `python install.py /path/to/project --list` for the full list. Summary:
 
-| 分组 | 说明 | 核心 Skills |
-|------|------|------------|
-| 核心 | BMAD 基础设施 | bmad-init, bmad-help, bmad-router |
-| 规划 | 需求/架构/Sprint | bmad-create-prd, bmad-create-architecture, bmad-sprint-planning |
-| 开发 | 编码/审查 | bmad-create-story, bmad-dev-story, bmad-code-review |
-| 自动化 | 全自动编排 | bmad-full-cycle, bmad-autopilot, bmad-migration-autopilot |
-| AI 代理 | 角色扮演 | bmad-agent-pm, bmad-agent-architect, bmad-agent-dev, bmad-agent-qa |
-| 研究 | 调研分析 | bmad-domain-research, bmad-market-research, bmad-technical-research |
-| 审查 | 质量保障 | bmad-review-edge-case-hunter, bmad-qa-generate-e2e-tests |
-| 文档 | 文档生成 | bmad-document-project, bmad-generate-project-context |
-| 创意 | 头脑风暴/UX | bmad-brainstorming, bmad-create-ux-design |
+| Group | Key Skills | Purpose |
+|-------|-----------|---------|
+| Core | bmad-init, bmad-help, bmad-router | Infrastructure, initialization |
+| Planning | bmad-create-prd, bmad-create-architecture, bmad-sprint-planning | Requirements → sprint plan |
+| Development | bmad-create-story, bmad-dev-story, bmad-code-review | Story-level coding loop |
+| Automation | bmad-full-cycle, bmad-autopilot, bmad-migration-autopilot | Fully automated orchestration |
+| AI Agents | bmad-agent-pm, bmad-agent-architect, bmad-agent-dev, bmad-agent-qa | Role-based AI personas |
+| Research | bmad-domain-research, bmad-market-research, bmad-technical-research | Investigation & analysis |
+| Review & QA | bmad-review-edge-case-hunter, bmad-qa-generate-e2e-tests | Quality assurance |
+| Documentation | bmad-document-project, bmad-generate-project-context | Doc generation & context |
+| Creative | bmad-brainstorming, bmad-create-ux-design, bmad-party-mode | Ideation & design |
 
-如果不需要全部安装，可以用 `--select` 只选需要的分组。
+Use `--select` to install only the groups you need.
 
-## 最终产出物
+## Output
 
-全流程完成后，项目中新增：
+After a full cycle, your project gains:
 
 ```
 docs/
-├── architecture/          ← 架构文档（系统总览、模块划分、技术栈、部署拓扑）
-├── api/                   ← API 文档（OpenAPI 规范、端点清单、请求示例）
-├── implementation/        ← 实施文档（技术决策、模块设计、配置项、异常处理）
-├── database/              ← 数据库文档（ER 图、DDL/DML 脚本、数据字典）
-├── deployment/            ← 部署指南
-└── changelog.md           ← 变更记录
+├── architecture/      ← System overview, module breakdown, tech stack, deployment topology
+├── api/               ← OpenAPI spec, endpoint list, request/response examples
+├── implementation/    ← Technical decisions, module design, config reference, error handling
+├── database/          ← ER diagram, DDL/DML scripts, data dictionary
+├── deployment/        ← Deployment guide
+└── changelog.md       ← Change log
 ```
 
-## 定制
+## Customization
 
-### 适配非 Java 项目
+### Non-Java projects
 
-默认包含 Java/Spring 规范（Swagger 注解、DDL 脚本）。其他技术栈只需编辑 SKILL.md：
+The default SKILL.md includes Java/Spring conventions (Swagger annotations, DDL scripts). For other stacks, edit the installed skill file:
 
-1. 用 IDE 打开 `.trae/skills/bmad-full-cycle/SKILL.md`
-2. 修改 Phase 7 的"Swagger 强制规范"和"SQL 文档规范"章节
-3. 替换为你的技术栈对应规范（如 Python/FastAPI、Go/Gin 等）
+- **Trae**: `.trae/skills/bmad-full-cycle/SKILL.md`
+- **Cursor**: `.cursor/rules/bmad-full-cycle.mdc`
+- **Windsurf**: `.windsurf/rules/bmad-full-cycle.md`
+- **Claude Code**: `.claude/commands/bmad-full-cycle.md`
 
-### 修改文档结构
+Modify the "Phase 7: Swagger" and "SQL documentation" sections to match your stack (e.g., Python/FastAPI, Go/Gin, Node/Express).
 
-编辑 `SKILL.md` 中 Phase 8 的文档目录结构和内容要求。
+### Modify document structure
 
-### 调整自动决策规则
+Edit Phase 8 in the same file to change the output `docs/` structure.
 
-编辑 `.trae/skills/bmad-autopilot/SKILL.md` 中的"自动决策规则"表格。
+### Adjust auto-decision rules
+
+Edit the bmad-autopilot skill file to change when the AI continues vs halts.
 
 ## FAQ
 
-**Q: 安装后在 Trae 中看不到 skill？**
-重启 Trae 或重新打开项目。Trae 在项目打开时扫描 `.trae/skills/` 目录。
+**Skills not loading in Trae?**
+Restart Trae or reopen the project. Trae scans `.trae/skills/` on project open.
 
-**Q: 中途发现 PRD 不对？**
-在 AI 对话中输入 `暂停`，手动编辑 `_bmad-output/planning-artifacts/prd.md`，然后输入 `继续开发`。
+**Cursor doesn't pick up the rules?**
+Check `.cursor/rules/` contains `.mdc` files. Type `@bmad-full-cycle` in Cursor chat to explicitly reference a rule.
 
-**Q: 可以只执行某个阶段吗？**
-可以。直接输入对应的 skill 触发词，例如 `生成架构设计`（触发 bmad-create-architecture）。
+**PRD is wrong mid-execution?**
+Type `pause` / `暂停`, edit `_bmad-output/planning-artifacts/prd.md`, then type `continue` / `继续开发`.
 
-**Q: 支持哪些 IDE？**
-目前以 Trae 为主，Cursor 和 Windsurf 通过 `--ide` 参数安装到对应目录。各 IDE 对 skills 的加载方式可能不同，具体请参考对应 IDE 文档。
+**Can I run individual phases?**
+Yes. Use the individual skill directly, e.g., `create architecture` triggers bmad-create-architecture.
+
+**Gitee mirror?**
+Also available at: https://gitee.com/chnj1981/bmad-full-cycle
 
 ## License
 

@@ -1,49 +1,70 @@
 #!/usr/bin/env python3
 """
-BMAD Full Cycle 安装脚本
+BMAD Full Cycle Installer
 
-将 BMAD skills 安装到目标项目中，支持 Trae / Cursor / Windsurf 等 AI IDE。
+Install BMAD skills into any AI IDE project.
 
-用法:
-    python install.py /path/to/your-project              # 默认安装到 Trae
-    python install.py /path/to/your-project --ide trae    # 指定 IDE
-    python install.py /path/to/your-project --ide cursor
-    python install.py /path/to/your-project --list        # 仅列出可用 skills
-    python install.py /path/to/your-project --select      # 交互选择要安装的 skills
+Supported IDEs:
+    trae        .trae/skills/{name}/SKILL.md        (native directory structure)
+    cursor      .cursor/rules/{name}.mdc            (frontmatter: description/globs/alwaysApply)
+    windsurf    .windsurf/rules/{name}.md            (workspace rules)
+    claude-code CLAUDE.md + .claude/commands/{name}.md (project instructions + slash commands)
+
+Usage:
+    python install.py /path/to/project                    # auto-detect IDE or default trae
+    python install.py /path/to/project --ide cursor       # specify IDE
+    python install.py /path/to/project --ide claude-code  # Claude Code
+    python install.py /path/to/project --list             # list available skills
+    python install.py /path/to/project --select           # interactive group selection
 """
 
 import argparse
 import os
+import re
 import shutil
 import sys
 import textwrap
 
-# ── IDE 配置 ──────────────────────────────────────────────────────────────
+# ── IDE Configs ───────────────────────────────────────────────────────────
 
 IDE_CONFIGS = {
     "trae": {
         "name": "Trae",
-        "skills_dir": ".trae/skills",
-        "description": "字节跳动 Trae IDE",
+        "rules_dir": ".trae/skills",
+        "format": "trae",
+        "chat_shortcut": "Cmd+L (macOS) / Ctrl+L (Windows)",
+        "description": "Trae IDE by ByteDance — native skill directories",
     },
     "cursor": {
         "name": "Cursor",
-        "skills_dir": ".cursor/skills",
-        "description": "Cursor AI IDE (如果支持 skills 目录)",
+        "rules_dir": ".cursor/rules",
+        "format": "mdc",
+        "chat_shortcut": "Cmd+L (macOS) / Ctrl+L (Windows)",
+        "description": "Cursor AI IDE — .mdc rule files with frontmatter",
     },
     "windsurf": {
         "name": "Windsurf",
-        "skills_dir": ".windsurf/skills",
-        "description": "Windsurf AI IDE (如果支持 skills 目录)",
+        "rules_dir": ".windsurf/rules",
+        "format": "windsurf",
+        "chat_shortcut": "Cmd+L (macOS) / Ctrl+L (Windows)",
+        "description": "Windsurf (Cascade) — workspace rule files",
+    },
+    "claude-code": {
+        "name": "Claude Code",
+        "rules_dir": ".claude/commands",
+        "format": "claude",
+        "chat_shortcut": "claude (CLI)",
+        "description": "Anthropic Claude Code — CLAUDE.md + slash commands",
     },
 }
 
-# ── Skill 分组 ────────────────────────────────────────────────────────────
+# ── Skill Groups ──────────────────────────────────────────────────────────
 
 SKILL_GROUPS = {
     "core": {
-        "name": "核心 (必装)",
-        "description": "BMAD 基础设施和项目初始化",
+        "name": "Core (required)",
+        "name_zh": "核心 (必装)",
+        "description": "BMAD infrastructure and project initialization",
         "skills": [
             "bmad-init",
             "bmad-help",
@@ -52,8 +73,9 @@ SKILL_GROUPS = {
         ],
     },
     "planning": {
-        "name": "规划阶段",
-        "description": "需求分析、架构设计、Epic/Story 拆分",
+        "name": "Planning",
+        "name_zh": "规划阶段",
+        "description": "Requirements, architecture, epic/story breakdown",
         "skills": [
             "bmad-create-prd",
             "bmad-edit-prd",
@@ -66,8 +88,9 @@ SKILL_GROUPS = {
         ],
     },
     "development": {
-        "name": "开发阶段",
-        "description": "Story 创建、编码实现、代码审查",
+        "name": "Development",
+        "name_zh": "开发阶段",
+        "description": "Story creation, coding, code review",
         "skills": [
             "bmad-create-story",
             "bmad-dev-story",
@@ -76,8 +99,9 @@ SKILL_GROUPS = {
         ],
     },
     "automation": {
-        "name": "自动化编排",
-        "description": "全自动循环执行，无需人工干预",
+        "name": "Automation",
+        "name_zh": "自动化编排",
+        "description": "Fully automated execution loops",
         "skills": [
             "bmad-full-cycle",
             "bmad-autopilot",
@@ -86,8 +110,9 @@ SKILL_GROUPS = {
         ],
     },
     "agents": {
-        "name": "AI 角色代理",
-        "description": "不同角色的 AI 代理（PM、架构师、开发、QA 等）",
+        "name": "AI Agents",
+        "name_zh": "AI 角色代理",
+        "description": "Role-based AI agents (PM, Architect, Dev, QA, etc.)",
         "skills": [
             "bmad-agent-analyst",
             "bmad-agent-architect",
@@ -101,8 +126,9 @@ SKILL_GROUPS = {
         ],
     },
     "research": {
-        "name": "研究与分析",
-        "description": "领域研究、市场调研、技术调研",
+        "name": "Research",
+        "name_zh": "研究与分析",
+        "description": "Domain, market, and technical research",
         "skills": [
             "bmad-domain-research",
             "bmad-market-research",
@@ -112,8 +138,9 @@ SKILL_GROUPS = {
         ],
     },
     "review": {
-        "name": "审查与质量",
-        "description": "文档审查、对抗性测试、边界场景",
+        "name": "Review & QA",
+        "name_zh": "审查与质量",
+        "description": "Document review, adversarial testing, edge cases",
         "skills": [
             "bmad-editorial-review-prose",
             "bmad-editorial-review-structure",
@@ -124,8 +151,9 @@ SKILL_GROUPS = {
         ],
     },
     "docs": {
-        "name": "文档工具",
-        "description": "项目文档生成、上下文提取、知识蒸馏",
+        "name": "Documentation",
+        "name_zh": "文档工具",
+        "description": "Project docs, context generation, knowledge distillation",
         "skills": [
             "bmad-document-project",
             "bmad-generate-project-context",
@@ -134,8 +162,9 @@ SKILL_GROUPS = {
         ],
     },
     "creative": {
-        "name": "创意与设计",
-        "description": "头脑风暴、UX 设计、多角色讨论",
+        "name": "Creative",
+        "name_zh": "创意与设计",
+        "description": "Brainstorming, UX design, multi-agent discussion",
         "skills": [
             "bmad-brainstorming",
             "bmad-create-ux-design",
@@ -144,60 +173,350 @@ SKILL_GROUPS = {
     },
 }
 
-# ── 颜色输出 ──────────────────────────────────────────────────────────────
+# ── Terminal Colors ───────────────────────────────────────────────────────
 
-def supports_color():
+def _supports_color():
     return hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
 
-if supports_color():
-    GREEN = "\033[32m"
-    YELLOW = "\033[33m"
-    CYAN = "\033[36m"
-    RED = "\033[31m"
-    BOLD = "\033[1m"
-    DIM = "\033[2m"
-    RESET = "\033[0m"
+if _supports_color():
+    GREEN = "\033[32m"; YELLOW = "\033[33m"; CYAN = "\033[36m"
+    RED = "\033[31m"; BOLD = "\033[1m"; DIM = "\033[2m"; RESET = "\033[0m"
 else:
     GREEN = YELLOW = CYAN = RED = BOLD = DIM = RESET = ""
-
 
 def print_header(text):
     print(f"\n{BOLD}{CYAN}{'─' * 60}{RESET}")
     print(f"{BOLD}{CYAN}  {text}{RESET}")
     print(f"{BOLD}{CYAN}{'─' * 60}{RESET}\n")
 
-
-def print_success(text):
-    print(f"  {GREEN}✓{RESET} {text}")
-
-
-def print_warn(text):
-    print(f"  {YELLOW}⚠{RESET} {text}")
+def print_success(text): print(f"  {GREEN}✓{RESET} {text}")
+def print_warn(text):    print(f"  {YELLOW}⚠{RESET} {text}")
+def print_error(text):   print(f"  {RED}✗{RESET} {text}")
+def print_info(text):    print(f"  {DIM}→{RESET} {text}")
 
 
-def print_error(text):
-    print(f"  {RED}✗{RESET} {text}")
+# ── Skill Parsing Helpers ─────────────────────────────────────────────────
+
+def parse_skill_md(skill_md_path):
+    """Parse a SKILL.md file, extract frontmatter and body."""
+    with open(skill_md_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    frontmatter = {}
+    body = content
+
+    # YAML frontmatter between ---
+    fm_match = re.match(r'^---\s*\n(.*?)\n---\s*\n', content, re.DOTALL)
+    if fm_match:
+        fm_text = fm_match.group(1)
+        body = content[fm_match.end():]
+        for line in fm_text.split("\n"):
+            if ":" in line:
+                key, val = line.split(":", 1)
+                frontmatter[key.strip()] = val.strip().strip('"').strip("'")
+
+    # Fallback: extract description from first heading or description field
+    if "description" not in frontmatter:
+        for line in body.split("\n"):
+            line = line.strip()
+            if line.startswith("# "):
+                frontmatter["description"] = line[2:].strip()
+                break
+
+    return frontmatter, body
 
 
-def print_info(text):
-    print(f"  {DIM}→{RESET} {text}")
+def collect_supporting_files(skill_dir):
+    """List all non-SKILL.md files in a skill directory (relative paths)."""
+    files = []
+    for root, dirs, filenames in os.walk(skill_dir):
+        for fname in filenames:
+            if fname == "SKILL.md":
+                continue
+            full_path = os.path.join(root, fname)
+            rel_path = os.path.relpath(full_path, skill_dir)
+            files.append(rel_path)
+    return files
 
 
-# ── 核心逻辑 ──────────────────────────────────────────────────────────────
+# ── IDE-specific Installers ───────────────────────────────────────────────
+
+def install_trae(skills_dir, target_project, skill_names):
+    """Trae: copy skill directories as-is to .trae/skills/"""
+    target_dir = os.path.join(target_project, ".trae", "skills")
+    os.makedirs(target_dir, exist_ok=True)
+
+    stats = {"installed": 0, "updated": 0}
+    for name in skill_names:
+        src = os.path.join(skills_dir, name)
+        dst = os.path.join(target_dir, name)
+        if os.path.exists(dst):
+            shutil.rmtree(dst)
+            shutil.copytree(src, dst)
+            print_success(f"{name} {DIM}(updated){RESET}")
+            stats["updated"] += 1
+        else:
+            shutil.copytree(src, dst)
+            print_success(name)
+            stats["installed"] += 1
+
+    return stats
+
+
+def install_cursor(skills_dir, target_project, skill_names):
+    """Cursor: convert SKILL.md to .mdc files in .cursor/rules/"""
+    rules_dir = os.path.join(target_project, ".cursor", "rules")
+    support_dir = os.path.join(target_project, "_bmad", "skills")
+    os.makedirs(rules_dir, exist_ok=True)
+
+    stats = {"installed": 0, "updated": 0}
+    for name in skill_names:
+        src_dir = os.path.join(skills_dir, name)
+        skill_md_path = os.path.join(src_dir, "SKILL.md")
+        if not os.path.isfile(skill_md_path):
+            continue
+
+        fm, body = parse_skill_md(skill_md_path)
+        desc = fm.get("description", name)
+
+        # Build .mdc content
+        mdc_lines = ["---"]
+        mdc_lines.append(f'description: "{desc}"')
+        mdc_lines.append("alwaysApply: false")
+        mdc_lines.append("---")
+        mdc_lines.append("")
+
+        # Add reference to supporting files if they exist
+        support_files = collect_supporting_files(src_dir)
+        if support_files:
+            mdc_lines.append(f"<!-- Supporting files: _bmad/skills/{name}/ -->")
+            mdc_lines.append("")
+
+        mdc_lines.append(body)
+
+        # Write .mdc file
+        mdc_path = os.path.join(rules_dir, f"{name}.mdc")
+        is_update = os.path.exists(mdc_path)
+        with open(mdc_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(mdc_lines))
+
+        # Copy supporting files
+        if support_files:
+            dst_support = os.path.join(support_dir, name)
+            if os.path.exists(dst_support):
+                shutil.rmtree(dst_support)
+            os.makedirs(dst_support, exist_ok=True)
+            for rel in support_files:
+                src_file = os.path.join(src_dir, rel)
+                dst_file = os.path.join(dst_support, rel)
+                os.makedirs(os.path.dirname(dst_file), exist_ok=True)
+                shutil.copy2(src_file, dst_file)
+
+        if is_update:
+            print_success(f"{name}.mdc {DIM}(updated){RESET}")
+            stats["updated"] += 1
+        else:
+            print_success(f"{name}.mdc")
+            stats["installed"] += 1
+
+    return stats
+
+
+def install_windsurf(skills_dir, target_project, skill_names):
+    """Windsurf: convert SKILL.md to .md rules in .windsurf/rules/"""
+    rules_dir = os.path.join(target_project, ".windsurf", "rules")
+    support_dir = os.path.join(target_project, "_bmad", "skills")
+    os.makedirs(rules_dir, exist_ok=True)
+
+    stats = {"installed": 0, "updated": 0}
+    for name in skill_names:
+        src_dir = os.path.join(skills_dir, name)
+        skill_md_path = os.path.join(src_dir, "SKILL.md")
+        if not os.path.isfile(skill_md_path):
+            continue
+
+        fm, body = parse_skill_md(skill_md_path)
+        desc = fm.get("description", name)
+
+        # Build rule content with Windsurf-compatible header
+        rule_lines = []
+        rule_lines.append(f"# {name}")
+        rule_lines.append("")
+        rule_lines.append(f"> {desc}")
+        rule_lines.append("")
+
+        support_files = collect_supporting_files(src_dir)
+        if support_files:
+            rule_lines.append(f"<!-- Supporting files: _bmad/skills/{name}/ -->")
+            rule_lines.append("")
+
+        rule_lines.append(body)
+
+        # Write rule file
+        rule_path = os.path.join(rules_dir, f"{name}.md")
+        is_update = os.path.exists(rule_path)
+        with open(rule_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(rule_lines))
+
+        # Copy supporting files
+        if support_files:
+            dst_support = os.path.join(support_dir, name)
+            if os.path.exists(dst_support):
+                shutil.rmtree(dst_support)
+            os.makedirs(dst_support, exist_ok=True)
+            for rel in support_files:
+                src_file = os.path.join(src_dir, rel)
+                dst_file = os.path.join(dst_support, rel)
+                os.makedirs(os.path.dirname(dst_file), exist_ok=True)
+                shutil.copy2(src_file, dst_file)
+
+        if is_update:
+            print_success(f"{name}.md {DIM}(updated){RESET}")
+            stats["updated"] += 1
+        else:
+            print_success(f"{name}.md")
+            stats["installed"] += 1
+
+    return stats
+
+
+def install_claude_code(skills_dir, target_project, skill_names):
+    """Claude Code: create CLAUDE.md + .claude/commands/{name}.md"""
+    commands_dir = os.path.join(target_project, ".claude", "commands")
+    support_dir = os.path.join(target_project, "_bmad", "skills")
+    os.makedirs(commands_dir, exist_ok=True)
+
+    # Collect skill descriptions for CLAUDE.md
+    skill_entries = []
+    stats = {"installed": 0, "updated": 0}
+
+    for name in skill_names:
+        src_dir = os.path.join(skills_dir, name)
+        skill_md_path = os.path.join(src_dir, "SKILL.md")
+        if not os.path.isfile(skill_md_path):
+            continue
+
+        fm, body = parse_skill_md(skill_md_path)
+        desc = fm.get("description", name)
+        trigger = fm.get("argument-hint", "")
+        skill_entries.append((name, desc, trigger))
+
+        # Create slash command file
+        cmd_content = body
+
+        # Add supporting file references
+        support_files = collect_supporting_files(src_dir)
+        if support_files:
+            cmd_content = f"<!-- Supporting files: _bmad/skills/{name}/ -->\n\n" + cmd_content
+
+        cmd_path = os.path.join(commands_dir, f"{name}.md")
+        is_update = os.path.exists(cmd_path)
+        with open(cmd_path, "w", encoding="utf-8") as f:
+            f.write(cmd_content)
+
+        # Copy supporting files
+        if support_files:
+            dst_support = os.path.join(support_dir, name)
+            if os.path.exists(dst_support):
+                shutil.rmtree(dst_support)
+            os.makedirs(dst_support, exist_ok=True)
+            for rel in support_files:
+                src_file = os.path.join(src_dir, rel)
+                dst_file = os.path.join(dst_support, rel)
+                os.makedirs(os.path.dirname(dst_file), exist_ok=True)
+                shutil.copy2(src_file, dst_file)
+
+        if is_update:
+            print_success(f"/{name} {DIM}(updated){RESET}")
+            stats["updated"] += 1
+        else:
+            print_success(f"/{name}")
+            stats["installed"] += 1
+
+    # Generate/update CLAUDE.md
+    claude_md_path = os.path.join(target_project, "CLAUDE.md")
+    bmad_section = _build_claude_md_section(skill_entries)
+
+    if os.path.isfile(claude_md_path):
+        with open(claude_md_path, "r", encoding="utf-8") as f:
+            existing = f.read()
+
+        # Replace existing BMAD section or append
+        marker_start = "<!-- BMAD-START -->"
+        marker_end = "<!-- BMAD-END -->"
+        if marker_start in existing:
+            pattern = re.compile(
+                re.escape(marker_start) + r".*?" + re.escape(marker_end),
+                re.DOTALL
+            )
+            new_content = pattern.sub(bmad_section, existing)
+        else:
+            new_content = existing.rstrip() + "\n\n" + bmad_section + "\n"
+
+        with open(claude_md_path, "w", encoding="utf-8") as f:
+            f.write(new_content)
+        print_success(f"CLAUDE.md {DIM}(BMAD section updated){RESET}")
+    else:
+        with open(claude_md_path, "w", encoding="utf-8") as f:
+            f.write(bmad_section + "\n")
+        print_success("CLAUDE.md")
+
+    return stats
+
+
+def _build_claude_md_section(skill_entries):
+    """Build the BMAD section for CLAUDE.md."""
+    lines = ["<!-- BMAD-START -->"]
+    lines.append("## BMAD Skills")
+    lines.append("")
+    lines.append("This project uses BMAD (Business Model-Aligned Development) skills.")
+    lines.append("Available as slash commands:")
+    lines.append("")
+
+    for name, desc, trigger in skill_entries:
+        lines.append(f"- `/{name}` — {desc}")
+
+    lines.append("")
+    lines.append("Key workflows:")
+    lines.append("- Full cycle (requirements → code → docs): `/{} [feature description]`".format("bmad-full-cycle"))
+    lines.append("- Auto dev loop: `/{}`".format("bmad-autopilot"))
+    lines.append("- Migration autopilot: `/{}`".format("bmad-migration-autopilot"))
+    lines.append("")
+    lines.append("Supporting files are in `_bmad/skills/`.")
+    lines.append("Project config: `_bmad/bmm/config.yaml`.")
+    lines.append("<!-- BMAD-END -->")
+    return "\n".join(lines)
+
+
+# ── Auto-detect IDE ───────────────────────────────────────────────────────
+
+def detect_ide(project_path):
+    """Try to detect which IDE is used based on existing directories."""
+    checks = [
+        (".trae", "trae"),
+        (".cursor", "cursor"),
+        (".windsurf", "windsurf"),
+        (".claude", "claude-code"),
+    ]
+    for dirname, ide in checks:
+        if os.path.isdir(os.path.join(project_path, dirname)):
+            return ide
+    return None
+
+
+# ── Common Logic ──────────────────────────────────────────────────────────
 
 def get_repo_skills_dir():
-    """获取本仓库中 skills/ 目录的路径"""
     script_dir = os.path.dirname(os.path.abspath(__file__))
     skills_dir = os.path.join(script_dir, "skills")
     if not os.path.isdir(skills_dir):
-        print_error(f"找不到 skills 目录: {skills_dir}")
-        print_info("请确保在 bmad-full-cycle 仓库根目录运行此脚本")
+        print_error(f"skills/ directory not found: {skills_dir}")
+        print_info("Make sure you're running from the bmad-full-cycle repository")
         sys.exit(1)
     return skills_dir
 
 
 def discover_available_skills(skills_dir):
-    """扫描 skills/ 目录，返回可用的 skill 名称列表"""
     skills = []
     for name in sorted(os.listdir(skills_dir)):
         skill_path = os.path.join(skills_dir, name)
@@ -207,10 +526,9 @@ def discover_available_skills(skills_dir):
 
 
 def list_skills(skills_dir):
-    """列出所有可用 skills（按分组）"""
     available = set(discover_available_skills(skills_dir))
 
-    print_header("可用的 BMAD Skills")
+    print_header("Available BMAD Skills")
 
     total = 0
     for group_id, group in SKILL_GROUPS.items():
@@ -223,40 +541,32 @@ def list_skills(skills_dir):
             skill_md = os.path.join(skills_dir, skill_name, "SKILL.md")
             desc = ""
             if os.path.isfile(skill_md):
-                with open(skill_md, "r", encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
-                        if line.startswith("description:"):
-                            desc = line.split(":", 1)[1].strip().strip('"')
-                            break
-                        if line.startswith("# "):
-                            desc = line[2:].strip()
-                            break
-            print(f"    {GREEN}•{RESET} {skill_name}  {DIM}{desc}{RESET}")
+                fm, _ = parse_skill_md(skill_md)
+                desc = fm.get("description", "")
+            desc_short = (desc[:60] + "...") if len(desc) > 63 else desc
+            print(f"    {GREEN}•{RESET} {skill_name}  {DIM}{desc_short}{RESET}")
             total += 1
         print()
 
-    # 未归类的 skills
     grouped = set()
     for group in SKILL_GROUPS.values():
         grouped.update(group["skills"])
     ungrouped = [s for s in available if s not in grouped]
     if ungrouped:
-        print(f"  {BOLD}其他{RESET}")
+        print(f"  {BOLD}Other{RESET}")
         for skill_name in ungrouped:
             print(f"    {GREEN}•{RESET} {skill_name}")
             total += 1
         print()
 
-    print(f"  {BOLD}共 {total} 个 skills{RESET}\n")
+    print(f"  {BOLD}Total: {total} skills{RESET}\n")
 
 
 def select_skills_interactive(skills_dir):
-    """交互式选择要安装的 skill 分组"""
     available = set(discover_available_skills(skills_dir))
 
-    print_header("选择要安装的 Skill 分组")
-    print("  输入分组编号（逗号分隔），或直接回车安装全部:\n")
+    print_header("Select Skill Groups to Install")
+    print("  Enter group numbers (comma-separated), or press Enter for all:\n")
 
     group_list = []
     for i, (group_id, group) in enumerate(SKILL_GROUPS.items(), 1):
@@ -267,246 +577,234 @@ def select_skills_interactive(skills_dir):
         print(f"  {marker} [{i}] {group['name']}  {DIM}({count} skills) — {group['description']}{RESET}")
         group_list.append((group_id, group))
 
-    print(f"\n  {DIM}带 * 的是 full-cycle 流程必需的分组{RESET}")
-    print()
+    print(f"\n  {DIM}* = required for full-cycle workflow{RESET}\n")
 
     try:
-        answer = input(f"  选择 (直接回车=全部): ").strip()
+        answer = input("  Select (Enter=all): ").strip()
     except (EOFError, KeyboardInterrupt):
         print()
         sys.exit(0)
 
-    selected_skills = set()
-
+    selected = set()
     if not answer:
-        # 全部安装
         for s in available:
-            selected_skills.add(s)
+            selected.add(s)
     else:
-        indices = [x.strip() for x in answer.split(",")]
-        for idx_str in indices:
+        for idx_str in answer.split(","):
             try:
-                idx = int(idx_str) - 1
+                idx = int(idx_str.strip()) - 1
                 if 0 <= idx < len(group_list):
-                    group_id, group = group_list[idx]
+                    _, group = group_list[idx]
                     for s in group["skills"]:
                         if s in available:
-                            selected_skills.add(s)
+                            selected.add(s)
             except ValueError:
-                print_warn(f"忽略无效输入: {idx_str}")
+                print_warn(f"Ignoring invalid input: {idx_str}")
 
-    # 确保 core 始终包含
+    # Always include core
     for s in SKILL_GROUPS["core"]["skills"]:
         if s in available:
-            selected_skills.add(s)
+            selected.add(s)
 
-    return sorted(selected_skills)
+    return sorted(selected)
 
 
 def install_skills(skills_dir, target_project, ide, skill_names=None):
-    """安装 skills 到目标项目"""
     available = discover_available_skills(skills_dir)
-
     if skill_names is None:
         skill_names = available
     else:
-        # 验证所有指定的 skill 存在
-        for name in skill_names:
-            if name not in available:
-                print_warn(f"跳过不存在的 skill: {name}")
         skill_names = [s for s in skill_names if s in available]
 
     ide_config = IDE_CONFIGS[ide]
-    target_skills_dir = os.path.join(target_project, ide_config["skills_dir"])
 
-    print_header(f"安装 BMAD Skills → {ide_config['name']}")
-    print_info(f"目标项目: {target_project}")
-    print_info(f"Skills 目录: {target_skills_dir}")
-    print_info(f"待安装: {len(skill_names)} 个 skills")
+    print_header(f"Installing BMAD Skills → {ide_config['name']}")
+    print_info(f"Target:  {target_project}")
+    print_info(f"IDE:     {ide_config['name']} ({ide_config['description']})")
+    print_info(f"Format:  {ide_config['format']}")
+    print_info(f"Skills:  {len(skill_names)}")
     print()
 
-    # 创建目标目录
-    os.makedirs(target_skills_dir, exist_ok=True)
+    # Dispatch to IDE-specific installer
+    installer = {
+        "trae": install_trae,
+        "cursor": install_cursor,
+        "windsurf": install_windsurf,
+        "claude-code": install_claude_code,
+    }[ide]
 
-    installed = 0
-    skipped = 0
-    updated = 0
-
-    for skill_name in skill_names:
-        src = os.path.join(skills_dir, skill_name)
-        dst = os.path.join(target_skills_dir, skill_name)
-
-        if os.path.exists(dst):
-            # 已存在 → 覆盖更新
-            shutil.rmtree(dst)
-            shutil.copytree(src, dst)
-            print_success(f"{skill_name} {DIM}(已更新){RESET}")
-            updated += 1
-        else:
-            shutil.copytree(src, dst)
-            print_success(f"{skill_name}")
-            installed += 1
+    stats = installer(skills_dir, target_project, skill_names)
 
     print()
-    print(f"  {BOLD}完成！{RESET}")
-    print_info(f"新安装: {installed}")
-    if updated:
-        print_info(f"已更新: {updated}")
-    if skipped:
-        print_info(f"已跳过: {skipped}")
+    print(f"  {BOLD}Done!{RESET}")
+    print_info(f"Installed: {stats['installed']}")
+    if stats.get("updated"):
+        print_info(f"Updated:   {stats['updated']}")
 
-    return installed + updated
+    return stats["installed"] + stats.get("updated", 0)
 
 
 def init_bmad(target_project, ide):
-    """在目标项目中创建基础 _bmad 目录结构"""
     bmad_dir = os.path.join(target_project, "_bmad", "bmm")
     config_file = os.path.join(bmad_dir, "config.yaml")
 
     if os.path.isfile(config_file):
-        print_info(f"_bmad/bmm/config.yaml 已存在，跳过初始化")
+        print_info("_bmad/bmm/config.yaml already exists, skipping init")
         return
 
-    print_header("初始化 BMAD 项目配置")
+    print_header("Initializing BMAD Project Config")
 
     os.makedirs(bmad_dir, exist_ok=True)
-
-    # 获取项目名称（从目录名推导）
     project_name = os.path.basename(os.path.normpath(target_project))
+    ide_name = IDE_CONFIGS[ide]["name"]
 
     config_content = textwrap.dedent(f"""\
-        # BMAD 项目配置
-        # 由 install.py 自动生成，可手动编辑
+        # BMAD Project Configuration
+        # Auto-generated by install.py — edit as needed
         #
-        # 详细配置说明: 在 Trae AI 对话中输入 "bmad-help" 查看
+        # For full interactive setup, type in {ide_name} AI chat:
+        #   bmad-init
+        # or (in Chinese):
+        #   初始化 bmad 项目
 
         project:
           name: {project_name}
           root: .
 
-        # 产出物路径
         paths:
           planning_artifacts: _bmad-output/planning-artifacts
           implementation_artifacts: _bmad-output/implementation-artifacts
-
-        # 如需配置模块、技术栈等高级选项，
-        # 请在 {IDE_CONFIGS[ide]['name']} AI 对话中输入:
-        #   初始化 bmad 项目
-        # AI 会交互式引导你完成完整配置
     """)
 
     with open(config_file, "w", encoding="utf-8") as f:
         f.write(config_content)
 
-    # 创建输出目录
     os.makedirs(os.path.join(target_project, "_bmad-output", "planning-artifacts"), exist_ok=True)
     os.makedirs(os.path.join(target_project, "_bmad-output", "implementation-artifacts"), exist_ok=True)
 
-    print_success(f"已创建 _bmad/bmm/config.yaml")
-    print_success(f"已创建 _bmad-output/ 目录结构")
-    print_info(f"如需完整配置，可在 {IDE_CONFIGS[ide]['name']} AI 对话中输入: 初始化 bmad 项目")
+    print_success("_bmad/bmm/config.yaml")
+    print_success("_bmad-output/ directories")
+    print_info(f"For full setup, type in {ide_name}: bmad-init")
 
 
 def print_next_steps(target_project, ide):
-    """打印安装后的操作指引"""
     ide_config = IDE_CONFIGS[ide]
     name = ide_config["name"]
 
-    print_header("下一步操作")
+    print_header("Next Steps")
 
-    print(f"  {BOLD}1. 用 {name} 打开项目{RESET}")
-    print(f"     File → Open Folder → {target_project}\n")
-
-    print(f"  {BOLD}2. 打开 AI 对话面板{RESET}")
-    if ide == "trae":
-        print(f"     点击右侧 Chat 面板，或按 Cmd+L (macOS) / Ctrl+L (Windows)\n")
+    # Step 1: open project
+    if ide == "claude-code":
+        print(f"  {BOLD}1. Enter your project directory{RESET}")
+        print(f"     cd {target_project}\n")
     else:
-        print(f"     打开 {name} 的 AI 对话面板\n")
+        print(f"  {BOLD}1. Open project in {name}{RESET}")
+        print(f"     File → Open Folder → {target_project}\n")
 
-    print(f"  {BOLD}3. 开始使用{RESET}")
-    print(f"     在对话框输入以下任一命令:\n")
-    print(f"     {CYAN}我要做一个功能: 用户管理模块{RESET}  ← 全流程开发 (bmad-full-cycle)")
-    print(f"     {CYAN}开始开发{RESET}                      ← 自动执行已有 Sprint (bmad-autopilot)")
-    print(f"     {CYAN}bmad-help{RESET}                     ← 查看所有可用命令")
+    # Step 2: open AI chat
+    print(f"  {BOLD}2. Open AI chat{RESET}")
+    if ide == "claude-code":
+        print(f"     Run: claude\n")
+    else:
+        print(f"     {ide_config['chat_shortcut']}\n")
+
+    # Step 3: start using
+    print(f"  {BOLD}3. Start using BMAD{RESET}")
+    if ide == "claude-code":
+        print(f"     {CYAN}/bmad-full-cycle I want to build: user management module{RESET}")
+        print(f"     {CYAN}/bmad-autopilot{RESET}       ← auto-execute existing sprint")
+        print(f"     {CYAN}/bmad-help{RESET}             ← list all commands")
+    else:
+        print(f"     Type in chat:\n")
+        print(f"     {CYAN}I want to build: user management module{RESET}  ← full cycle")
+        print(f"     {CYAN}start autopilot{RESET}                          ← auto-execute sprint")
+        print(f"     {CYAN}bmad-help{RESET}                                ← list all commands")
     print()
 
+    # IDE-specific notes
+    if ide == "cursor":
+        print(f"  {DIM}Note: Cursor rules are loaded from .cursor/rules/*.mdc{RESET}")
+        print(f"  {DIM}Type @ in chat to reference a specific rule (e.g. @bmad-full-cycle){RESET}\n")
+    elif ide == "windsurf":
+        print(f"  {DIM}Note: Windsurf rules are loaded from .windsurf/rules/*.md{RESET}")
+        print(f"  {DIM}Cascade will automatically apply matching rules{RESET}\n")
+    elif ide == "claude-code":
+        print(f"  {DIM}Note: Skills are available as /{'{'}command{'}'} slash commands{RESET}")
+        print(f"  {DIM}CLAUDE.md provides project context automatically{RESET}\n")
 
-# ── 入口 ──────────────────────────────────────────────────────────────────
+
+# ── Entry Point ───────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(
-        description="BMAD Full Cycle 安装脚本 — 将 BMAD skills 安装到你的项目中",
+        description="BMAD Full Cycle Installer — install BMAD skills into any AI IDE project",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent("""\
-            示例:
-              python install.py /path/to/my-project                # 安装全部 skills 到 Trae 项目
-              python install.py /path/to/my-project --ide cursor   # 安装到 Cursor 项目
-              python install.py /path/to/my-project --select       # 交互式选择分组
-              python install.py /path/to/my-project --list         # 仅列出可用 skills
-              python install.py /path/to/my-project --no-init      # 安装 skills 但不初始化配置
+            Examples:
+              python install.py /path/to/project                    # auto-detect or default trae
+              python install.py /path/to/project --ide cursor       # Cursor (.mdc rules)
+              python install.py /path/to/project --ide windsurf     # Windsurf (Cascade rules)
+              python install.py /path/to/project --ide claude-code  # Claude Code (CLAUDE.md + /commands)
+              python install.py /path/to/project --select           # interactive group selection
+              python install.py /path/to/project --list             # list available skills
+              python install.py /path/to/project --no-init          # skip _bmad/ config creation
+
+            Supported IDEs:
+              trae         Trae IDE — .trae/skills/ directories
+              cursor       Cursor — .cursor/rules/*.mdc files
+              windsurf     Windsurf — .windsurf/rules/*.md files
+              claude-code  Claude Code — CLAUDE.md + .claude/commands/
         """),
     )
-    parser.add_argument(
-        "project",
-        help="目标项目的根目录路径",
-    )
-    parser.add_argument(
-        "--ide",
-        choices=list(IDE_CONFIGS.keys()),
-        default="trae",
-        help="目标 IDE (默认: trae)",
-    )
-    parser.add_argument(
-        "--list",
-        action="store_true",
-        dest="list_only",
-        help="仅列出可用的 skills，不安装",
-    )
-    parser.add_argument(
-        "--select",
-        action="store_true",
-        help="交互式选择要安装的 skill 分组",
-    )
-    parser.add_argument(
-        "--no-init",
-        action="store_true",
-        help="不创建 _bmad/ 基础配置目录",
-    )
+    parser.add_argument("project", help="Target project root directory")
+    parser.add_argument("--ide", choices=list(IDE_CONFIGS.keys()), default=None,
+                        help="Target IDE (auto-detected if omitted)")
+    parser.add_argument("--list", action="store_true", dest="list_only",
+                        help="List available skills without installing")
+    parser.add_argument("--select", action="store_true",
+                        help="Interactively select skill groups to install")
+    parser.add_argument("--no-init", action="store_true",
+                        help="Skip _bmad/ config directory creation")
 
     args = parser.parse_args()
     skills_dir = get_repo_skills_dir()
 
-    # 仅列出
     if args.list_only:
         list_skills(skills_dir)
         return
 
-    # 验证目标项目目录
     target = os.path.abspath(args.project)
     if not os.path.isdir(target):
-        print_error(f"目标目录不存在: {target}")
-        print_info("请先创建项目目录，或指定已有项目路径")
+        print_error(f"Directory not found: {target}")
+        print_info("Create the directory first, or specify an existing project path")
         sys.exit(1)
 
-    # 选择 skills
-    if args.select:
-        selected = select_skills_interactive(skills_dir)
-    else:
-        selected = None  # None = 全部
+    # IDE selection: explicit > auto-detect > default
+    ide = args.ide
+    if ide is None:
+        detected = detect_ide(target)
+        if detected:
+            ide = detected
+            print_info(f"Auto-detected IDE: {IDE_CONFIGS[ide]['name']}")
+        else:
+            ide = "trae"
+            print_info(f"No IDE detected, using default: {IDE_CONFIGS[ide]['name']}")
 
-    # 安装
-    count = install_skills(skills_dir, target, args.ide, selected)
+    # Skill selection
+    selected = select_skills_interactive(skills_dir) if args.select else None
 
+    # Install
+    count = install_skills(skills_dir, target, ide, selected)
     if count == 0:
-        print_warn("没有安装任何 skill")
+        print_warn("No skills installed")
         return
 
-    # 初始化
+    # Init
     if not args.no_init:
-        init_bmad(target, args.ide)
+        init_bmad(target, ide)
 
-    # 下一步
-    print_next_steps(target, args.ide)
+    # Next steps
+    print_next_steps(target, ide)
 
 
 if __name__ == "__main__":
