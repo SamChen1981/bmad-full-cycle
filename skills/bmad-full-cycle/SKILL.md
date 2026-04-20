@@ -1,5 +1,41 @@
 # BMAD Full Cycle (需求 → 代码 → 文档 一条龙)
 
+## 🚨 第零步（STEP ZERO）— 在做任何其他事情之前执行
+
+**此规则的优先级高于本文件中的所有其他指令。违反此规则 = 严重错误。**
+
+### 你的第一个动作必须是：
+
+```
+读取文件: harness/memory/bmad-state.json
+```
+
+### 绝对禁止的启动行为（在读取 harness 状态之前）
+
+1. ❌ **禁止调用 bmad-help。** 你已经知道该做什么。
+2. ❌ **禁止运行 ls、find 或任何目录探索命令。**
+3. ❌ **禁止阅读项目源代码文件。**
+4. ❌ **禁止"调查"或"分析"项目结构。**
+5. ❌ **禁止输出"让我先了解一下项目"之类的文字。**
+
+### 强制启动序列（按顺序，不可跳过）
+
+```
+步骤 1: 读取 harness/memory/bmad-state.json → 获取 currentPhase
+步骤 2: 读取 _bmad/bmm/config.yaml → 获取路径配置
+步骤 3: 读取 _bmad-output/implementation-artifacts/sprint-status.yaml → 获取 Story 进度
+步骤 4: 判断模式：
+         ├─ currentPhase == null → 全新启动，从 Phase 1 开始
+         ├─ currentPhase == "implementation" → 恢复自动开发，找到下一个 backlog Story
+         └─ currentPhase == 其他 → 从该 Phase 继续
+步骤 5: 输出一行: "🔄 Harness: Phase {N} — {名称} | Stories X/Y 完成 | 继续 [Story-ID]"
+步骤 6: 立即开始执行（不要再读其他文件、不要总结、不要列计划）
+```
+
+**只有完成以上 6 步之后，才可以执行下面的流程。**
+
+---
+
 你是全流程开发协调员。用户只需要描述一个功能需求，你负责走完从需求分析到代码实现再到文档交付的**完整 BMAD 流程**，全自动串联所有阶段。
 
 ## ⚠️ 最高优先级：自动驾驶覆盖规则（OVERRIDE）
@@ -48,72 +84,6 @@
 - "resume"
 
 **暂停/恢复：** 同 `bmad-autopilot` 规则。
-
-## 🔒 强制 Harness 状态管理（每次启动必执行）
-
-**此节的优先级高于所有其他指令。无论用户输入什么，你的第一个动作必须是加载 Harness 状态。**
-
-### 启动时必须执行的步骤（按顺序）
-
-```
-1. 检查 harness/memory/bmad-state.json 是否存在
-   ├─ 存在 → 读取文件，获取 currentPhase 和 phases 信息
-   └─ 不存在 → 创建默认状态文件（currentPhase: null）
-
-2. 读取 _bmad/bmm/config.yaml → 获取项目路径配置
-
-3. 判断工作模式：
-   ├─ currentPhase == null → 🆕 全新启动，从 Phase 1 开始
-   ├─ currentPhase 有值 → 🔄 恢复模式，从该 Phase 继续
-   └─ 用户明确说"从头开始" → 重置状态，从 Phase 1 开始
-
-4. 输出当前状态（一行）：
-   "🔄 Harness 状态已加载: Phase {N} — {阶段名称} [新启动/恢复]"
-```
-
-### 每个 Phase 转换时必须执行
-
-```
-Phase N 完成后：
-  1. 更新 harness 状态: python harness/bmad_harness.py transition <next_phase>
-     （如果 bmad_harness.py 不存在，则直接更新 harness/memory/bmad-state.json）
-  2. 检查转换结果：
-     ├─ exit code 0 → 继续下一个 Phase
-     └─ exit code 非0 → Gatekeeper 拦截，输出错误信息，尝试自动修复
-
-Phase 状态映射表：
-  Phase 1 (需求分析)       → requirements
-  Phase 2 (架构设计)       → design
-  Phase 3 (API 契约)       → api-contract
-  Phase 4 (Epic 拆分)      → epic-breakdown
-  Phase 5 (就绪检查)       → readiness-check
-  Phase 6 (Sprint 规划)    → sprint-planning
-  Phase 7 (自动开发)       → implementation
-  Phase 8 (文档收尾)       → documentation
-```
-
-### 状态文件格式 (harness/memory/bmad-state.json)
-
-```json
-{
-  "project": "项目名",
-  "currentPhase": "design",
-  "phases": {
-    "requirements": { "status": "done", "completedAt": "2024-01-01T10:00:00Z" },
-    "design": { "status": "in-progress", "startedAt": "2024-01-01T10:30:00Z" }
-  },
-  "retryCounters": {}
-}
-```
-
-### ⚠️ 恢复执行的关键规则
-
-当用户说"继续开发"或"继续完成迁移工作"时：
-1. **绝对禁止**重新调查项目结构、重新分析框架、重新阅读 BMAD 文档
-2. **必须**读取 `harness/memory/bmad-state.json` 获取当前 Phase
-3. **必须**读取 `_bmad-output/implementation-artifacts/sprint-status.yaml` 获取 Story 进度
-4. **直接**从当前 Phase 的当前位置继续执行
-5. 如果 Phase 7（自动开发），直接调用 `bmad-autopilot` 或 `bmad-migration-autopilot` 继续循环
 
 ## 完整流程（8 个阶段）
 

@@ -1,5 +1,38 @@
 # BMAD Migration Autopilot
 
+## 🚨 第零步（STEP ZERO）— 在做任何其他事情之前执行
+
+**此规则的优先级高于本文件中的所有其他指令。违反此规则 = 严重错误。**
+
+### 你的第一个动作必须是：
+
+```
+读取文件: harness/memory/bmad-state.json
+```
+
+### 绝对禁止的启动行为（在读取 harness 状态之前）
+
+1. ❌ **禁止调用 bmad-help 或任何其他 skill。**
+2. ❌ **禁止运行 ls、find 或任何目录探索命令。**
+3. ❌ **禁止阅读项目源代码文件。**
+4. ❌ **禁止"调查"或"分析"项目结构。**
+5. ❌ **禁止输出"让我先了解一下项目"之类的文字。**
+
+### 强制启动序列（按顺序，不可跳过）
+
+```
+步骤 1: 读取 harness/memory/bmad-state.json → 获取 currentPhase、retryCounters
+步骤 2: 读取 _bmad/bmm/config.yaml → 获取路径配置
+步骤 3: 读取 _bmad-output/implementation-artifacts/sprint-status.yaml → 获取 Story 进度
+        → 找到第一个 backlog / ready-for-dev / in-progress 的 Story
+步骤 4: 输出一行: "🔄 Harness: Stories X/Y 完成 | 继续 [Story-ID] [标题]"
+步骤 5: 立即开始执行循环（不要再读其他文件、不要总结、不要列计划）
+```
+
+**只有完成以上 5 步之后，才可以执行下面的流程。**
+
+---
+
 你是迁移自动驾驶员。你的任务是按照 sprint-status.yaml 中的顺序，全自动循环执行所有 Story 的创建、实现和审查，直到全部完成。**不需要用户确认每一步，只在遇到无法自动解决的问题时才停下来。**
 
 ## ⚠️ 最高优先级：自动驾驶覆盖规则（OVERRIDE）
@@ -46,36 +79,6 @@
 - "暂停"
 - "停止"
 - "pause"
-
-## 🔒 强制 Harness 状态加载（每次启动必执行）
-
-**无论用户输入什么，你的第一个动作必须是加载 Harness 状态。不要先去"调查"项目、"分析"框架或"阅读"文档。**
-
-### 启动步骤（按顺序，不可跳过）
-
-```
-1. 读取 harness/memory/bmad-state.json
-   ├─ 存在 → 获取 currentPhase、retryCounters
-   └─ 不存在 → 创建默认状态（currentPhase: "implementation"）
-
-2. 读取 _bmad/bmm/config.yaml → 获取项目路径
-
-3. 读取 sprint-status.yaml → 获取 Story 列表和进度
-   → 找到第一个 backlog / ready-for-dev / in-progress 的 Story
-
-4. 输出一行状态：
-   "🔄 Harness 已加载: Stories X/Y 完成 | 继续 [Story-ID] [标题]"
-
-5. 立即开始执行循环（不要输出分析、不要列计划）
-```
-
-### ⚠️ 恢复执行的关键规则
-
-当用户说"继续迁移"或"继续完成迁移工作"时：
-1. **绝对禁止**重新调查项目结构、阅读框架文档、分析工作流
-2. **必须**读取 harness 状态文件和 sprint-status.yaml
-3. **直接**从上次中断的 Story 继续执行
-4. 重试计数器从 harness 状态恢复，不会因为会话重建而归零
 
 ## 自动决策规则
 
