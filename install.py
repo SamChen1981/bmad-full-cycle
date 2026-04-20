@@ -19,6 +19,7 @@ Usage:
 """
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -703,6 +704,74 @@ def install_skills(skills_dir, target_project, ide, skill_names=None):
     return stats["installed"] + stats.get("updated", 0)
 
 
+def install_harness(target_project):
+    """Install BMAD Harness infrastructure files into the target project.
+
+    Copies harness files (state management, gatekeeper, config) so that
+    bmad-full-cycle and autopilot skills can persist phase state across
+    sessions and enforce gatekeeper validation on phase transitions.
+    """
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    src_harness = os.path.join(script_dir, "harness")
+    dst_harness = os.path.join(target_project, "harness")
+
+    if not os.path.isdir(src_harness):
+        print_warn("harness/ directory not found in repo, skipping harness install")
+        return
+
+    print_header("Installing BMAD Harness Infrastructure")
+
+    # Files to copy (relative to harness/)
+    harness_files = [
+        "bmad_harness.py",
+        "bmad-gatekeeper.sh",
+        "bmad-harness-config.json",
+    ]
+
+    os.makedirs(dst_harness, exist_ok=True)
+    os.makedirs(os.path.join(dst_harness, "memory"), exist_ok=True)
+
+    for fname in harness_files:
+        src = os.path.join(src_harness, fname)
+        dst = os.path.join(dst_harness, fname)
+        if os.path.isfile(src):
+            is_update = os.path.isfile(dst)
+            shutil.copy2(src, dst)
+            label = f"{DIM}(updated){RESET}" if is_update else ""
+            print_success(f"harness/{fname} {label}")
+
+    # Ensure memory/bmad-state.json exists (don't overwrite if already has state)
+    state_file = os.path.join(dst_harness, "memory", "bmad-state.json")
+    if not os.path.isfile(state_file):
+        src_state = os.path.join(src_harness, "memory", "bmad-state.json")
+        if os.path.isfile(src_state):
+            shutil.copy2(src_state, state_file)
+            print_success("harness/memory/bmad-state.json")
+        else:
+            # Create a default empty state
+            default_state = {
+                "project": os.path.basename(os.path.normpath(target_project)),
+                "currentPhase": None,
+                "phases": {},
+                "retryCounters": {},
+            }
+            with open(state_file, "w", encoding="utf-8") as f:
+                json.dump(default_state, f, indent=2, ensure_ascii=False)
+            print_success("harness/memory/bmad-state.json (default)")
+    else:
+        print_info("harness/memory/bmad-state.json already exists, preserving state")
+
+    # Make scripts executable
+    for script in ["bmad_harness.py", "bmad-gatekeeper.sh"]:
+        path = os.path.join(dst_harness, script)
+        if os.path.isfile(path):
+            os.chmod(path, 0o755)
+
+    print()
+    print_info("Harness installed → phase state persists across sessions")
+    print_info("Skills will auto-load harness/memory/bmad-state.json on startup")
+
+
 def init_bmad(target_project, ide):
     bmad_dir = os.path.join(target_project, "_bmad", "bmm")
     config_file = os.path.join(bmad_dir, "config.yaml")
@@ -1112,6 +1181,9 @@ def main():
     # Init
     if not args.no_init:
         init_bmad(target, ide)
+
+    # Harness
+    install_harness(target)
 
     # Next steps
     print_next_steps(target, ide)

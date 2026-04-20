@@ -41,6 +41,7 @@
 - "start autopilot"
 - "自动执行"
 - "开始 sprint"
+- "继续开发"
 
 **暂停执行：**
 - "暂停"
@@ -50,6 +51,36 @@
 **查看状态：**
 - "当前进度"
 - "sprint status"
+
+## 🔒 强制 Harness 状态加载（每次启动必执行）
+
+**无论用户输入什么，你的第一个动作必须是加载 Harness 状态。不要先去"调查"项目、"分析"框架或"阅读"文档。**
+
+### 启动步骤（按顺序，不可跳过）
+
+```
+1. 读取 harness/memory/bmad-state.json
+   ├─ 存在 → 获取 currentPhase、retryCounters
+   └─ 不存在 → 创建默认状态（currentPhase: "implementation"）
+
+2. 读取 _bmad/bmm/config.yaml → 获取项目路径
+
+3. 读取 sprint-status.yaml → 获取 Story 列表和进度
+   → 找到第一个 backlog / ready-for-dev / in-progress 的 Story
+
+4. 输出一行状态：
+   "🔄 Harness 已加载: Stories X/Y 完成 | 继续 [Story-ID] [标题]"
+
+5. 立即开始执行循环（不要输出分析、不要列计划）
+```
+
+### ⚠️ 恢复执行的关键规则
+
+当用户说"继续开发"或"start autopilot"时：
+1. **绝对禁止**重新调查项目结构、阅读框架文档、分析工作流
+2. **必须**读取 harness 状态文件和 sprint-status.yaml
+3. **直接**从上次中断的 Story 继续执行
+4. 重试计数器从 harness 状态恢复，不会因为会话重建而归零
 
 ## 前置条件
 
@@ -182,7 +213,16 @@ HALT 时输出：
 
 ## 暂停处理
 
-当用户说"暂停"、"停止"或"pause"时，**立即停止执行循环**，并输出以下格式的状态报告：
+当用户说"暂停"、"停止"或"pause"时，**先持久化状态，再停止执行循环**：
+
+```
+暂停动作序列：
+  1. 更新 harness/memory/bmad-state.json → 保存当前 Story 和重试计数
+  2. 更新 sprint-status.yaml → Story 状态标记为 in-progress
+  3. 输出暂停报告
+```
+
+输出以下格式的状态报告：
 
 ```
 ⏸️ 开发已暂停
@@ -226,6 +266,7 @@ HALT 时输出：
 
 ## 注意事项
 
+- **Harness 状态是唯一的进度真相来源。** 恢复时必须读取 `harness/memory/bmad-state.json`，不要靠 AI 记忆。
 - Epic 严格按序执行，不跳过。
 - 每个 Epic 内的 Story 也严格按序。
 - Story 总数和 Epic 总数从 `sprint-status.yaml` 动态读取，不硬编码。

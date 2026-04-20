@@ -42,7 +42,78 @@
 - "从头开始开发: [描述]"
 - "新功能: [描述]"
 
+**恢复/继续：**
+- "继续开发"
+- "继续完成迁移工作"
+- "resume"
+
 **暂停/恢复：** 同 `bmad-autopilot` 规则。
+
+## 🔒 强制 Harness 状态管理（每次启动必执行）
+
+**此节的优先级高于所有其他指令。无论用户输入什么，你的第一个动作必须是加载 Harness 状态。**
+
+### 启动时必须执行的步骤（按顺序）
+
+```
+1. 检查 harness/memory/bmad-state.json 是否存在
+   ├─ 存在 → 读取文件，获取 currentPhase 和 phases 信息
+   └─ 不存在 → 创建默认状态文件（currentPhase: null）
+
+2. 读取 _bmad/bmm/config.yaml → 获取项目路径配置
+
+3. 判断工作模式：
+   ├─ currentPhase == null → 🆕 全新启动，从 Phase 1 开始
+   ├─ currentPhase 有值 → 🔄 恢复模式，从该 Phase 继续
+   └─ 用户明确说"从头开始" → 重置状态，从 Phase 1 开始
+
+4. 输出当前状态（一行）：
+   "🔄 Harness 状态已加载: Phase {N} — {阶段名称} [新启动/恢复]"
+```
+
+### 每个 Phase 转换时必须执行
+
+```
+Phase N 完成后：
+  1. 更新 harness 状态: python harness/bmad_harness.py transition <next_phase>
+     （如果 bmad_harness.py 不存在，则直接更新 harness/memory/bmad-state.json）
+  2. 检查转换结果：
+     ├─ exit code 0 → 继续下一个 Phase
+     └─ exit code 非0 → Gatekeeper 拦截，输出错误信息，尝试自动修复
+
+Phase 状态映射表：
+  Phase 1 (需求分析)       → requirements
+  Phase 2 (架构设计)       → design
+  Phase 3 (API 契约)       → api-contract
+  Phase 4 (Epic 拆分)      → epic-breakdown
+  Phase 5 (就绪检查)       → readiness-check
+  Phase 6 (Sprint 规划)    → sprint-planning
+  Phase 7 (自动开发)       → implementation
+  Phase 8 (文档收尾)       → documentation
+```
+
+### 状态文件格式 (harness/memory/bmad-state.json)
+
+```json
+{
+  "project": "项目名",
+  "currentPhase": "design",
+  "phases": {
+    "requirements": { "status": "done", "completedAt": "2024-01-01T10:00:00Z" },
+    "design": { "status": "in-progress", "startedAt": "2024-01-01T10:30:00Z" }
+  },
+  "retryCounters": {}
+}
+```
+
+### ⚠️ 恢复执行的关键规则
+
+当用户说"继续开发"或"继续完成迁移工作"时：
+1. **绝对禁止**重新调查项目结构、重新分析框架、重新阅读 BMAD 文档
+2. **必须**读取 `harness/memory/bmad-state.json` 获取当前 Phase
+3. **必须**读取 `_bmad-output/implementation-artifacts/sprint-status.yaml` 获取 Story 进度
+4. **直接**从当前 Phase 的当前位置继续执行
+5. 如果 Phase 7（自动开发），直接调用 `bmad-autopilot` 或 `bmad-migration-autopilot` 继续循环
 
 ## 完整流程（8 个阶段）
 
@@ -512,7 +583,16 @@ Phase 8 完成后必须验证：
 
 ## 暂停处理
 
-支持在任意阶段暂停。暂停报告格式：
+支持在任意阶段暂停。暂停时**必须先持久化状态**：
+
+```
+暂停动作序列：
+  1. 更新 harness/memory/bmad-state.json → currentPhase 设为当前阶段
+  2. 如果在 Phase 7，同时更新 sprint-status.yaml 中的 Story 状态
+  3. 输出暂停报告（格式见下方）
+```
+
+暂停报告格式：
 
 ```
 ⏸️ Full Cycle 已暂停
@@ -536,8 +616,10 @@ Phase 8 完成后必须验证：
 
 ## 注意事项
 
+- **Harness 状态是唯一的进度真相来源。** 不要靠 AI 记忆判断当前阶段，必须读取 `harness/memory/bmad-state.json`。
 - 此 skill 是"一键启动"的端到端流程，内部串联所有现有 BMAD skill。
 - Phase 3 的 API 契约是整个开发的基准，Phase 7 的每个 Story 必须与之一致。
 - Phase 8 的文档收尾确保交付物完整：代码 + 文档 + API 规范三位一体。
 - 如果项目已经有 PRD、架构、Epic，可以直接用 `bmad-autopilot` 跳过前面的阶段。
 - springdoc-openapi 依赖只需在第一个涉及 Controller 的 Story 中添加一次。
+- 每次 Phase 转换都会通过 Harness 持久化，确保上下文丢失后可以恢复。
