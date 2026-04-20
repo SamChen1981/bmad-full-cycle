@@ -39,7 +39,22 @@ status: 'complete'
 completedAt: '{{current_date}}'
 ```
 
-### 3. Next Steps Guidance
+### 3. Document Quality Review
+
+Before declaring architecture complete, validate the document against the **bmad-document-reviewer** checklist:
+
+- **D1:** Does the document contain at least one Mermaid diagram (component graph or sequence diagram)?
+- **D2:** Does every technology choice have a documented reason?
+- **D3:** Is there at least one Architecture Decision Record (ADR)?
+- **D4:** Are module dependency directions defined?
+- **D5:** Are non-functional requirements covered (security, performance, scalability, fault tolerance)?
+- **D6:** Are core database entities described with field definitions?
+
+If any D1-D3 items fail, the document is **not ready** for the next phase. Fix before proceeding.
+
+Reference templates: `templates/architecture-template.md` in the bmad-full-cycle repository.
+
+### 4. Next Steps Guidance
 
 Architecture complete. Invoke the `bmad-help` skill.
 

@@ -120,6 +120,96 @@ case "${CURRENT}" in
         # 按需添加更多设计文档检查
         # check_file_exists "docs/database_design.md" "数据库设计文档" || ERRORS=$((ERRORS + 1))
 
+        # ---- 架构文档质量检测 (bmad-document-reviewer D1-D3) ----
+        ARCH_DOC=""
+        for candidate in "docs/architecture_design.md" "docs/architecture.md"; do
+            if [ -f "${PROJECT_ROOT}/${candidate}" ]; then
+                ARCH_DOC="${PROJECT_ROOT}/${candidate}"
+                break
+            fi
+        done
+
+        if [ -n "${ARCH_DOC}" ]; then
+            echo "  [DOC] 正在审查架构文档质量..."
+
+            # [D1 阻断] 检查是否包含 Mermaid 图表
+            if grep -q '```mermaid' "${ARCH_DOC}" 2>/dev/null; then
+                echo "  [OK] D1: 包含 Mermaid 图表"
+            else
+                echo "  [BLOCK] D1: 架构文档缺少 Mermaid 图表（纯文字描述不合格）"
+                ERRORS=$((ERRORS + 1))
+            fi
+
+            # [D2 阻断] 检查是否包含技术选型理由
+            if grep -qi "选型理由\|选型\|技术栈" "${ARCH_DOC}" 2>/dev/null; then
+                echo "  [OK] D2: 包含技术选型说明"
+            else
+                echo "  [BLOCK] D2: 架构文档缺少技术选型理由"
+                ERRORS=$((ERRORS + 1))
+            fi
+
+            # [D3 阻断] 检查是否包含架构决策记录 (ADR)
+            if grep -qi "架构决策\|ADR\|决策记录" "${ARCH_DOC}" 2>/dev/null; then
+                echo "  [OK] D3: 包含架构决策记录"
+            else
+                echo "  [BLOCK] D3: 架构文档缺少架构决策记录 (ADR)"
+                ERRORS=$((ERRORS + 1))
+            fi
+
+            # [D4 告警] 检查模块依赖规则
+            if grep -qi "依赖\|分层\|依赖方向\|模块边界" "${ARCH_DOC}" 2>/dev/null; then
+                echo "  [OK] D4: 包含模块依赖规则"
+            else
+                echo "  [WARN] D4: 建议补充模块依赖方向和分层规则"
+            fi
+
+            # [D5 告警] 检查非功能性需求
+            NFR_COUNT=0
+            for nfr_keyword in "安全" "性能" "可扩展" "容错" "熔断" "缓存策略"; do
+                if grep -qi "${nfr_keyword}" "${ARCH_DOC}" 2>/dev/null; then
+                    NFR_COUNT=$((NFR_COUNT + 1))
+                fi
+            done
+            if [ ${NFR_COUNT} -ge 2 ]; then
+                echo "  [OK] D5: 包含非功能性需求（命中 ${NFR_COUNT} 个关键词）"
+            else
+                echo "  [WARN] D5: 建议补充非功能性需求（安全/性能/可扩展性/容错性）"
+            fi
+        fi
+
+        # ---- 技术规格文档检测 (bmad-document-reviewer T1-T3) ----
+        TECH_SPECS=$(find "${PROJECT_ROOT}/docs" -maxdepth 1 \( -name "tech-spec*" -o -name "技术规格*" \) 2>/dev/null)
+        if [ -n "${TECH_SPECS}" ]; then
+            echo "  [DOC] 正在审查技术规格文档质量..."
+            while IFS= read -r spec_file; do
+                [ -z "${spec_file}" ] && continue
+                SPEC_NAME=$(basename "${spec_file}")
+                echo "  [DOC] 检查 ${SPEC_NAME}..."
+
+                # [T1 阻断] JSON 示例
+                if grep -q '```json' "${spec_file}" 2>/dev/null; then
+                    echo "    [OK] T1: 包含 JSON 示例"
+                else
+                    echo "    [BLOCK] T1: 缺少接口 JSON 示例"
+                    ERRORS=$((ERRORS + 1))
+                fi
+
+                # [T2 告警] 数据库字段定义
+                if grep -qi "CREATE TABLE\|VARCHAR\|BIGINT\|DECIMAL\|字段" "${spec_file}" 2>/dev/null; then
+                    echo "    [OK] T2: 包含数据库字段定义"
+                else
+                    echo "    [WARN] T2: 建议补充数据库字段定义（DDL 或表格）"
+                fi
+
+                # [T3 告警] 核心逻辑流程
+                if grep -q '```mermaid' "${spec_file}" 2>/dev/null || grep -qi "伪代码\|function \|流程图" "${spec_file}" 2>/dev/null; then
+                    echo "    [OK] T3: 包含逻辑流程描述"
+                else
+                    echo "    [WARN] T3: 建议补充核心逻辑流程图或伪代码"
+                fi
+            done <<< "${TECH_SPECS}"
+        fi
+
         # 检查至少一个子项目已初始化
         PROJ_INIT=0
         for proj in "${BACKEND_PROJECTS[@]}" "${FRONTEND_PROJECTS[@]}"; do

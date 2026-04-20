@@ -143,6 +143,7 @@ SKILL_GROUPS = {
         "name_zh": "审查与质量",
         "description": "Document review, adversarial testing, edge cases",
         "skills": [
+            "bmad-document-reviewer",
             "bmad-editorial-review-prose",
             "bmad-editorial-review-structure",
             "bmad-review-adversarial-general",
