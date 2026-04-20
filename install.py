@@ -90,12 +90,13 @@ SKILL_GROUPS = {
     "development": {
         "name": "Development",
         "name_zh": "开发阶段",
-        "description": "Story creation, coding, code review",
+        "description": "Story creation, coding, code review, code standards",
         "skills": [
             "bmad-create-story",
             "bmad-dev-story",
             "bmad-code-review",
             "bmad-correct-course",
+            "bmad-java-code-standards",
         ],
     },
     "automation": {

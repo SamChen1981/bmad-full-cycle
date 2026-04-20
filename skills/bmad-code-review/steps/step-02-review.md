@@ -28,6 +28,25 @@ failed_layers: '' # set at runtime: comma-separated list of layers that failed o
 
 4. Collect all findings from the completed layers.
 
+5. **Java Standards Auditor** (only if project contains `pom.xml` or `build.gradle` — Java project detected):
+
+   Run an additional review layer using the `bmad-java-code-standards` skill's `review-checklist.md`. Check ALL changed `.java` files in `{diff_output}` against the 8 mandatory rules:
+
+   - **R1 SRP** — single responsibility for classes and methods
+   - **R2 OCP** — open-closed principle, no excessive type branching
+   - **R3 Factory+Strategy** — design pattern usage for multi-type dispatching
+   - **R4 Java Standards** — naming, structure, exception handling, null safety
+   - **R5 Class Header** — @author, @since, @modified tags present
+   - **R6 Method Docs** — Javadoc + process comments + key-node logging
+   - **R7 Log Spec** — unified format `[Module][Operation][Param]`, correct levels, no sensitive data
+   - **R8 Code Reuse** — no duplicate code, proper use of utils/base classes/templates
+
+   Each violation produces a finding with: rule ID, severity (`patch` or `critical`), file:line, and specific issue description. Output as a structured table per `review-checklist.md` format.
+
+   If `bmad-java-code-standards` skill is not installed, skip this layer and note: "Java Standards Auditor skipped — bmad-java-code-standards skill not installed."
+
+6. Merge all findings from all layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor, Java Standards Auditor).
+
 
 ## NEXT
 

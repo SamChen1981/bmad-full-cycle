@@ -285,6 +285,19 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
     <action>Improve code structure while keeping tests green</action>
     <action>Ensure code follows architecture patterns and coding standards from Dev Notes</action>
 
+    <!-- JAVA CODE STANDARDS ENFORCEMENT (if project uses Java) -->
+    <check if="project contains pom.xml or build.gradle (Java project)">
+      <critical>Load and enforce bmad-java-code-standards skill rules for ALL generated Java files</critical>
+      <action>[R1 SRP] Verify each class has single responsibility; verify each method does one thing and ≤50 lines</action>
+      <action>[R2 OCP] If adding type-based branching ≥3 cases, refactor to interface + implementations</action>
+      <action>[R3 Factory+Strategy] For multi-type dispatching, use strategy interface + factory with Spring auto-injection</action>
+      <action>[R4 Java Standards] Enforce naming conventions (UpperCamelCase classes, lowerCamelCase methods, UPPER_SNAKE constants)</action>
+      <action>[R5 Class Header] Add class Javadoc with @author, @since (yyyy-MM-dd), @modified for changes, responsibility description</action>
+      <action>[R6 Method Docs] Add Javadoc to all public/protected methods; add step-numbered process comments; add key-node log statements</action>
+      <action>[R7 Log Spec] Use format [Module][Operation][KeyParam]; correct level (ERROR/WARN/INFO/DEBUG); no System.out; no sensitive data</action>
+      <action>[R8 Reuse] Search project for existing similar logic before writing new code; extract utils/base classes for duplicate code</action>
+    </check>
+
     <action>Document technical approach and decisions in Dev Agent Record → Implementation Plan</action>
 
     <action if="new dependencies required beyond story specifications">HALT: "Additional dependencies need user approval"</action>
