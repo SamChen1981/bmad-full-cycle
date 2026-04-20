@@ -726,6 +726,7 @@ def install_harness(target_project):
         "bmad_harness.py",
         "bmad-gatekeeper.sh",
         "bmad-harness-config.json",
+        "bmad-resume.sh",
     ]
 
     os.makedirs(dst_harness, exist_ok=True)
@@ -762,7 +763,7 @@ def install_harness(target_project):
         print_info("harness/memory/bmad-state.json already exists, preserving state")
 
     # Make scripts executable
-    for script in ["bmad_harness.py", "bmad-gatekeeper.sh"]:
+    for script in ["bmad_harness.py", "bmad-gatekeeper.sh", "bmad-resume.sh"]:
         path = os.path.join(dst_harness, script)
         if os.path.isfile(path):
             os.chmod(path, 0o755)
