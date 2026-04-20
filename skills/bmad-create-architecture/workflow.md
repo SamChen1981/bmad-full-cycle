@@ -29,6 +29,18 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
 - `date` as system-generated current datetime
 - ✅ YOU MUST ALWAYS SPEAK OUTPUT In your Agent communication style with the config `{communication_language}`
 
+### Documentation Standards Loading (Three-Layer Architecture)
+
+Load the enterprise documentation quality framework:
+
+1. **System Prompt:** Load `prompts/architecture-system-prompt.md` — injects mandatory constraints for architecture document generation (D1-D6 requirements)
+2. **Document Template:** Load `templates/architecture-template.md` — the minimum-viable structure every architecture document must follow
+3. **Few-Shot Examples:** Load examples from `skills/bmad-documentation/examples/`:
+   - `example-adr.md` — ADR format reference (what "good" looks like)
+   - `example-mermaid.md` — Mermaid diagram standard patterns (component, sequence, ER, state, deployment)
+
+These three layers ensure generated architecture documents meet enterprise-grade standards. The system prompt defines rules, the template defines structure, and the examples define quality.
+
 ---
 
 ## EXECUTION

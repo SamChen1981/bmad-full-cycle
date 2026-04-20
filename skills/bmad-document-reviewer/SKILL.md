@@ -11,7 +11,9 @@ alwaysApply: false
 **核心原则：** 架构文档是"法律"，技术文档是"施工图纸"。空话和模糊描述是不合格的。
 
 完整审查清单见 `./review-checklist.md`。
-文档模板见 `./templates/` 目录。
+文档模板见 `templates/architecture-template.md` 和 `templates/tech-spec-template.md`。
+少样本示例见 `skills/bmad-documentation/examples/` 目录（ADR、Mermaid、接口/DDL 范本）。
+系统提示词见 `prompts/` 目录。
 
 ## 审查范围
 

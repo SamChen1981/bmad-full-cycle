@@ -155,8 +155,9 @@ SKILL_GROUPS = {
     "docs": {
         "name": "Documentation",
         "name_zh": "文档工具",
-        "description": "Project docs, context generation, knowledge distillation",
+        "description": "Project docs, context generation, knowledge distillation, enterprise doc standards",
         "skills": [
+            "bmad-documentation",
             "bmad-document-project",
             "bmad-generate-project-context",
             "bmad-shard-doc",
