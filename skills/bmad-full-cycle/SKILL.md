@@ -1,3 +1,8 @@
+---
+name: bmad-full-cycle
+description: 'Run the full BMAD lifecycle: requirements → architecture → API → epics → sprint → autopilot → docs. Resumes from harness state if it exists. Use when the user says "full cycle", "继续开发", "恢复开发", or wants to run the complete 8-phase BMAD workflow from start to finish.'
+---
+
 # BMAD Full Cycle (需求 → 代码 → 文档 一条龙)
 
 ## 🚨 第零步 — 你的第一个动作

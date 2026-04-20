@@ -1,3 +1,8 @@
+---
+name: bmad-autopilot
+description: 'Universal development autopilot that auto-executes all stories in sprint-status.yaml sequentially (create → dev → review). Resumes from harness state. Use when the user says "autopilot", "自动开发", or wants to batch-execute planned stories without manual intervention.'
+---
+
 # BMAD Autopilot (Universal)
 
 ## 🚨 第零步 — 你的第一个动作

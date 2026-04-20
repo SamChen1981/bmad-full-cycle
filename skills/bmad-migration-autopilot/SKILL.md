@@ -1,3 +1,8 @@
+---
+name: bmad-migration-autopilot
+description: 'Migration-specific autopilot that auto-executes all migration stories in sprint-status.yaml (create → dev → review). Resumes from harness state. Use when the user says "继续迁移", "migration autopilot", or wants to batch-execute migration stories.'
+---
+
 # BMAD Migration Autopilot
 
 ## 🚨 第零步 — 你的第一个动作
