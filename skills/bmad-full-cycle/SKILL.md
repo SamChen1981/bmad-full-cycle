@@ -7,32 +7,50 @@
 ### 你的第一个动作必须是：
 
 ```
-读取文件: harness/memory/bmad-state.json
+尝试读取文件: harness/memory/bmad-state.json
 ```
 
-### 绝对禁止的启动行为（在读取 harness 状态之前）
+### 根据读取结果分两条路径
 
-1. ❌ **禁止调用 bmad-help。** 你已经知道该做什么。
+**路径 A：文件存在（已有项目，恢复执行）**
+
+这是一个已初始化的项目，必须从 Harness 状态恢复。此路径下：
+
+1. ❌ **禁止调用 bmad-help 或任何其他 skill。** 你已经知道该做什么。
 2. ❌ **禁止运行 ls、find 或任何目录探索命令。**
 3. ❌ **禁止阅读项目源代码文件。**
 4. ❌ **禁止"调查"或"分析"项目结构。**
-5. ❌ **禁止输出"让我先了解一下项目"之类的文字。**
 
-### 强制启动序列（按顺序，不可跳过）
+强制启动序列：
 
 ```
-步骤 1: 读取 harness/memory/bmad-state.json → 获取 currentPhase
+步骤 1: 解析 bmad-state.json → 获取 currentPhase
 步骤 2: 读取 _bmad/bmm/config.yaml → 获取路径配置
-步骤 3: 读取 _bmad-output/implementation-artifacts/sprint-status.yaml → 获取 Story 进度
+步骤 3: 读取 sprint-status.yaml → 获取 Story 进度（如果 Phase 7+）
 步骤 4: 判断模式：
-         ├─ currentPhase == null → 全新启动，从 Phase 1 开始
          ├─ currentPhase == "implementation" → 恢复自动开发，找到下一个 backlog Story
          └─ currentPhase == 其他 → 从该 Phase 继续
-步骤 5: 输出一行: "🔄 Harness: Phase {N} — {名称} | Stories X/Y 完成 | 继续 [Story-ID]"
+步骤 5: 输出一行: "🔄 Harness: Phase {N} — {名称} | Stories X/Y | 继续 [Story-ID]"
 步骤 6: 立即开始执行（不要再读其他文件、不要总结、不要列计划）
 ```
 
-**只有完成以上 6 步之后，才可以执行下面的流程。**
+**路径 B：文件不存在（全新项目，首次启动）**
+
+这是一个全新的项目，正常流程启动。此路径下：
+
+1. ✅ 可以正常探索项目结构、阅读已有代码
+2. ✅ 可以调用 bmad-init 初始化项目配置
+3. ✅ 从 Phase 1（需求分析）开始完整流程
+4. ✅ 在完成 Phase 1 之前，创建 `harness/memory/bmad-state.json` 记录进度
+
+```
+步骤 1: 输出: "🆕 全新项目，从 Phase 1 开始"
+步骤 2: 如果 _bmad/bmm/config.yaml 不存在 → 先执行 bmad-init
+步骤 3: 从用户输入提取需求，进入 Phase 1（需求分析）
+步骤 4: 每个 Phase 完成后更新 harness/memory/bmad-state.json
+```
+
+**关键判断：harness/memory/bmad-state.json 是否存在 → 决定走路径 A 还是路径 B。**
 
 ---
 

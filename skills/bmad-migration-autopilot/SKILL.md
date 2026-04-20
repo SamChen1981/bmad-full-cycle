@@ -7,29 +7,37 @@
 ### 你的第一个动作必须是：
 
 ```
-读取文件: harness/memory/bmad-state.json
+尝试读取文件: harness/memory/bmad-state.json
 ```
 
-### 绝对禁止的启动行为（在读取 harness 状态之前）
+### 根据读取结果分两条路径
+
+**路径 A：文件存在（已有项目，恢复执行）**
+
+此路径下严格禁止探索行为：
 
 1. ❌ **禁止调用 bmad-help 或任何其他 skill。**
 2. ❌ **禁止运行 ls、find 或任何目录探索命令。**
 3. ❌ **禁止阅读项目源代码文件。**
 4. ❌ **禁止"调查"或"分析"项目结构。**
-5. ❌ **禁止输出"让我先了解一下项目"之类的文字。**
 
-### 强制启动序列（按顺序，不可跳过）
+强制启动序列：
 
 ```
-步骤 1: 读取 harness/memory/bmad-state.json → 获取 currentPhase、retryCounters
+步骤 1: 解析 bmad-state.json → 获取 currentPhase、retryCounters
 步骤 2: 读取 _bmad/bmm/config.yaml → 获取路径配置
-步骤 3: 读取 _bmad-output/implementation-artifacts/sprint-status.yaml → 获取 Story 进度
-        → 找到第一个 backlog / ready-for-dev / in-progress 的 Story
-步骤 4: 输出一行: "🔄 Harness: Stories X/Y 完成 | 继续 [Story-ID] [标题]"
+步骤 3: 读取 sprint-status.yaml → 找到第一个 backlog/ready-for-dev/in-progress Story
+步骤 4: 输出一行: "🔄 Harness: Stories X/Y | 继续 [Story-ID] [标题]"
 步骤 5: 立即开始执行循环（不要再读其他文件、不要总结、不要列计划）
 ```
 
-**只有完成以上 5 步之后，才可以执行下面的流程。**
+**路径 B：文件不存在（全新项目）**
+
+这是一个尚未初始化 Harness 的项目。此路径下：
+
+1. ✅ 可以正常探索项目结构、阅读迁移方案
+2. ✅ 检查 sprint-status.yaml 是否存在，如存在则直接开始循环
+3. ✅ 如都不存在，提示用户先执行 `bmad-sprint-planning` 生成 Sprint 计划
 
 ---
 
