@@ -296,6 +296,8 @@ Load config from `{project-root}/_bmad/bmm/config.yaml` and resolve:
       <action>[R6 Method Docs] Add Javadoc to all public/protected methods; add step-numbered process comments; add key-node log statements</action>
       <action>[R7 Log Spec] Use format [Module][Operation][KeyParam]; correct level (ERROR/WARN/INFO/DEBUG); no System.out; no sensitive data</action>
       <action>[R8 Reuse] Search project for existing similar logic before writing new code; extract utils/base classes for duplicate code</action>
+      <action>[R9 Defensive] Validate all public method params at entry (guard clauses); return empty collections not null; use try-with-resources for IO/DB connections</action>
+      <action>[R10 DI Discipline] Never use `new` for business dependencies; use constructor injection with `@RequiredArgsConstructor`; externalize configs via @Value/@ConfigurationProperties</action>
     </check>
 
     <action>Document technical approach and decisions in Dev Agent Record → Implementation Plan</action>

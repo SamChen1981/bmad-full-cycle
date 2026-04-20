@@ -104,26 +104,69 @@
 ## R7: 日志规格
 
 - [ ] 日志格式是否统一使用 `[模块][操作][关键参数]` 模式？
-- [ ] 是否使用了 `System.out.println`？
+- [ ] 是否使用了 `System.out.println` / `System.err.println` / `e.printStackTrace()`？
 - [ ] 日志中是否打印了敏感信息（密码、身份证、银行卡号）？
 - [ ] 循环内是否有大量 INFO 日志（应改为 DEBUG 或汇总）？
 - [ ] ERROR 日志是否包含上下文参数和异常对象？
 - [ ] 是否使用字符串拼接而非占位符 `{}`？
 - [ ] 日志级别是否恰当（DEBUG/INFO/WARN/ERROR 区分是否正确）？
+- [ ] 是否配置了 MDC TraceId（分布式环境下的链路追踪）？
+- [ ] logback.xml 的 pattern 是否包含 `%X{traceId}`？
 
-**严重级别：** 敏感信息泄露 → `critical`，格式不统一 → `patch`，`System.out.println` → `patch`
+**严重级别：** 敏感信息泄露 → `critical`，格式不统一 → `patch`，`System.out.println` → `patch`，缺少 TraceId → `patch`
 
 ---
 
-## R8: 代码复用
+## R8: 代码复用 (DRY)
 
-- [ ] 是否存在两处以上相似代码？（复制粘贴嫌疑）
+- [ ] 是否存在两处以上相似代码（>5 行重复）？（复制粘贴嫌疑）
 - [ ] 通用逻辑（参数校验、分页、响应封装）是否使用了项目级工具类/基类？
-- [ ] 相似业务流程是否使用了模板方法模式？
+- [ ] 是否按优先级使用工具类？（JDK → Apache Commons → Guava → 项目 Utils）
+- [ ] 字符串判空是否使用 `StringUtils.isBlank()` 而非手写？
+- [ ] 集合判空是否使用 `CollectionUtils.isEmpty()` 而非手写？
+- [ ] 日期处理是否使用 `java.time`（严禁 `java.util.Date`）？
+- [ ] 相似业务流程（>3 个子类相同骨架）是否使用了模板方法模式？
 - [ ] 继承层次是否超过 3 层？
 - [ ] 是否优先使用组合（依赖注入）而非继承？
 
-**严重级别：** 重复代码 → `patch`（提取公共方法），深层继承 → `patch`
+**严重级别：** 重复代码 → `patch`（提取公共方法），深层继承 → `patch`，重复造轮子 → `patch`
+
+---
+
+## R9: 防御性编程
+
+### 参数校验前置
+- [ ] 所有 public 方法入口是否做了参数校验（卫语句 / early throw）？
+- [ ] 必填参数是否使用 `Objects.requireNonNull()` 或 `@NotNull` 注解？
+- [ ] 业务参数校验是否使用了 BizException + ErrorCode？
+
+### 空指针防护
+- [ ] 方法返回集合时是否返回了 null？（应返回 `Collections.emptyList()`）
+- [ ] 返回可能为空的单个对象是否使用了 `Optional<T>`？
+- [ ] 外部输入（Controller 参数、RPC 返回值）是否做了 null 检查？
+- [ ] 字符串判空是否使用 `StringUtils.isBlank()`？
+- [ ] 集合判空是否使用 `CollectionUtils.isEmpty()`？
+- [ ] Map 取值是否使用 `map.getOrDefault()` 代替直接 get？
+
+### 资源管理
+- [ ] IO 流、数据库连接、HTTP 客户端是否使用了 **try-with-resources**？
+- [ ] catch 块中是否只打印了 `e.getMessage()` 而吞掉异常栈？（必须传递完整异常对象）
+- [ ] 创建 ArrayList/HashMap 时已知大小是否指定了初始容量？
+
+**严重级别：** 缺少参数校验 → `patch`，返回 null 集合 → `patch`，未关闭资源 → `critical`，吞异常栈 → `critical`
+
+---
+
+## R10: 依赖注入纪律
+
+- [ ] 业务类中是否使用了 `new` 创建依赖对象？（严禁，必须注入）
+- [ ] 是否使用了构造函数注入（推荐，配合 `@RequiredArgsConstructor`）？
+- [ ] 注入字段是否声明为 `private final`？
+- [ ] 是否使用了字段注入 `@Autowired` on field？（禁止使用）
+- [ ] 配置值是否使用 `@Value` 或 `@ConfigurationProperties`？（严禁硬编码 URL、端口、密码）
+- [ ] 类的依赖注入数量是否超过 7 个？（超过说明职责过多，需拆分）
+
+**严重级别：** new 依赖对象 → `critical`，字段注入 → `patch`，硬编码配置 → `patch`
 
 ---
 
@@ -132,7 +175,7 @@
 ```markdown
 ### Java Standards Auditor — 审查结果
 
-**检查规则:** 8 条 | **通过:** X 条 | **不通过:** Y 条
+**检查规则:** 10 条 | **通过:** X 条 | **不通过:** Y 条
 
 | 规则 | 状态 | 严重级别 | 发现 | 位置 |
 |------|------|---------|------|------|
@@ -143,7 +186,9 @@
 | R5 类注释 | PASS/FAIL | ... | ... | ... |
 | R6 方法注释 | PASS/FAIL | ... | ... | ... |
 | R7 日志规格 | PASS/FAIL | ... | ... | ... |
-| R8 复用 | PASS/FAIL | ... | ... | ... |
+| R8 DRY 复用 | PASS/FAIL | ... | ... | ... |
+| R9 防御性编程 | PASS/FAIL | ... | ... | ... |
+| R10 依赖注入 | PASS/FAIL | ... | ... | ... |
 
 **总结:** [所有通过 / 存在 patch 级问题需修复 / 存在 critical 级问题需重构]
 ```

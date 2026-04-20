@@ -149,6 +149,92 @@ case "${CURRENT}" in
         for proj in "${BACKEND_PROJECTS[@]}"; do
             check_maven_compile "${proj}" || ERRORS=$((ERRORS + 1))
         done
+
+        # ---- Java 静态质量检测 (bmad-java-code-standards) ----
+        JAVA_WARNINGS=0
+        JAVA_BLOCKS=0
+        for proj in "${BACKEND_PROJECTS[@]}"; do
+            JAVA_SRC="${PROJECT_ROOT}/${proj}/src/main/java"
+            if [ ! -d "${JAVA_SRC}" ]; then
+                continue
+            fi
+            echo "  [JAVA] 正在扫描 ${proj} Java 代码质量..."
+
+            # [阻断] 扫描 System.out.println / System.err.println / e.printStackTrace()
+            SYSOUT_COUNT=$(grep -rn "System\.out\.\|System\.err\.\|\.printStackTrace()" "${JAVA_SRC}" --include="*.java" 2>/dev/null | wc -l | tr -d ' ')
+            if [ "${SYSOUT_COUNT}" -gt 0 ]; then
+                echo "  [BLOCK] 发现 ${SYSOUT_COUNT} 处 System.out/err 或 printStackTrace（必须替换为 SLF4J 日志）"
+                grep -rn "System\.out\.\|System\.err\.\|\.printStackTrace()" "${JAVA_SRC}" --include="*.java" 2>/dev/null | head -5
+                JAVA_BLOCKS=$((JAVA_BLOCKS + SYSOUT_COUNT))
+            else
+                echo "  [OK] 未发现 System.out/err 或 printStackTrace"
+            fi
+
+            # [告警] 扫描类头部是否有 @author 和 @since
+            MISSING_HEADER=0
+            while IFS= read -r jfile; do
+                if ! grep -q "@author" "$jfile" 2>/dev/null; then
+                    echo "  [WARN] 缺少 @author: ${jfile#${PROJECT_ROOT}/}"
+                    MISSING_HEADER=$((MISSING_HEADER + 1))
+                fi
+                if ! grep -q "@since" "$jfile" 2>/dev/null; then
+                    echo "  [WARN] 缺少 @since: ${jfile#${PROJECT_ROOT}/}"
+                    MISSING_HEADER=$((MISSING_HEADER + 1))
+                fi
+            done < <(find "${JAVA_SRC}" -name "*.java" -type f 2>/dev/null)
+            if [ "${MISSING_HEADER}" -gt 0 ]; then
+                JAVA_WARNINGS=$((JAVA_WARNINGS + MISSING_HEADER))
+            else
+                echo "  [OK] 所有 Java 类包含 @author 和 @since"
+            fi
+
+            # [告警] 扫描超过 300 行的 Java 类文件
+            while IFS= read -r jfile; do
+                LINE_COUNT=$(wc -l < "$jfile" | tr -d ' ')
+                if [ "${LINE_COUNT}" -gt 300 ]; then
+                    echo "  [WARN] 类文件超过 300 行 (${LINE_COUNT} 行): ${jfile#${PROJECT_ROOT}/}"
+                    JAVA_WARNINGS=$((JAVA_WARNINGS + 1))
+                fi
+            done < <(find "${JAVA_SRC}" -name "*.java" -type f 2>/dev/null)
+
+            # [告警] 扫描超过 80 行的方法（简易检测：从方法签名到对应的闭合大括号）
+            while IFS= read -r jfile; do
+                awk '
+                /^[[:space:]]*(public|private|protected)[[:space:]]/ && /\{[[:space:]]*$/ {
+                    method_start = NR
+                    method_line = $0
+                    brace_count = 1
+                    next
+                }
+                method_start > 0 {
+                    gsub(/[^{]/, "", tmp=$0); brace_count += length(tmp)
+                    gsub(/[^}]/, "", tmp=$0); brace_count -= length(tmp)
+                    if (brace_count <= 0) {
+                        method_len = NR - method_start
+                        if (method_len > 80) {
+                            printf "  [WARN] 方法超过 80 行 (%d 行) @ %s:%d\n", method_len, FILENAME, method_start
+                        }
+                        method_start = 0
+                    }
+                }
+                ' "$jfile"
+            done < <(find "${JAVA_SRC}" -name "*.java" -type f 2>/dev/null)
+
+            # [阻断] 扫描空 catch 块
+            EMPTY_CATCH=$(grep -Pzn "catch\s*\([^)]*\)\s*\{[\s]*\}" "${JAVA_SRC}"/*.java 2>/dev/null | wc -l | tr -d ' ')
+            if [ "${EMPTY_CATCH}" -gt 0 ]; then
+                echo "  [BLOCK] 发现 ${EMPTY_CATCH} 处空 catch 块（必须记录日志或抛出异常）"
+                JAVA_BLOCKS=$((JAVA_BLOCKS + EMPTY_CATCH))
+            fi
+        done
+
+        if [ ${JAVA_BLOCKS} -gt 0 ]; then
+            echo "  [JAVA] 阻断级问题: ${JAVA_BLOCKS} 处，必须修复后才能通过"
+            ERRORS=$((ERRORS + JAVA_BLOCKS))
+        fi
+        if [ ${JAVA_WARNINGS} -gt 0 ]; then
+            echo "  [JAVA] 告警级问题: ${JAVA_WARNINGS} 处，建议修复"
+        fi
         ;;
 
     "testing")
